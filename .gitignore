@@ -55,3 +55,6 @@ DDLParserWV/bin/*
 
 # Launcher preferences (per-user)
 tools/settings.json
+
+# Third-party tooling, not part of this project
+AnvilKit/
