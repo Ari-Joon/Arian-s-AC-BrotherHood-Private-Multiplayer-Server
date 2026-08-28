@@ -52,8 +52,32 @@ Referenced by name in the binary:
 | `LightingShaderConfig.ini` | shader configuration |
 | `multi\DefaultBindings.map` | key bindings — **this file exists on disk**, 17 KB |
 
-None of the INIs ship with the game; it creates them on demand. To find where,
-change a setting in-game and then search for a newly written `.ini`.
+**Location found** — the Windows *Saved Games* known folder, which is why no
+`Documents` or `My Games` string appears in the binary:
+
+```
+%USERPROFILE%\Saved Games\Assassin's Creed Brotherhood\
+    ACBrotherhood.ini      <- [Graphics] + input profiles (shared by SP and MP)
+    ACBrotherhoodMP.ini    <- multiplayer key bindings only
+    SAVES\
+```
+
+The game writes these **on exit**, not when a setting changes.
+
+**Quality values are clamped.** Setting the five quality keys one step above the
+in-game maximum and relaunching results in the game rewriting them back down
+(6->5, 3->2, 5->4, 4->3, 5->4). The menu ceiling is the engine ceiling; there is
+no hidden visual headroom here. The INI is 0-indexed while the menu displays
+1-based, so menu "6" is `=5` in the file.
+
+**Key bindings are fully open**, by contrast — `ACBrotherhoodMP.ini` holds
+complete scancode bindings for `[Keyboard]`, `[KeyboardAlt]`, `[KeyboardMouse2]`
+and `[KeyboardMouse5]`, and these are not clamped.
+
+**Controller selection** is `[Input] SelectedInput=` in `ACBrotherhood.ini`. A
+`[DualSense Wireless Controller]` profile already exists in the file
+(VendorID=1356, ProductID=3302), so the game recognises the pad — but if
+`SelectedInput` names a keyboard profile, the controller will not be used.
 
 ## INI keys recovered from string analysis
 
