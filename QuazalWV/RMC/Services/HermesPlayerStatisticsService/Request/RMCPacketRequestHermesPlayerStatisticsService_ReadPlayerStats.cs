@@ -23,7 +23,14 @@ namespace QuazalWV
 
 		public override string PayloadToString()
 		{
-			return "";
+			// Instrumented: dump exactly which stat IDs the client asks for, so we
+			// can see what the challenge screen reads.
+			System.Text.StringBuilder sb = new System.Text.StringBuilder();
+			sb.AppendLine($"	[Players: {string.Join(", ", Players)}]");
+			sb.AppendLine($"	[Queries: {Queries.Count}]");
+			foreach (StatQuery q in Queries)
+				sb.AppendLine($"		[StatId {q.StatId} -> InfoIds: {string.Join(",", q.InfoIds)}]");
+			return sb.ToString();
 		}
 
 		public override byte[] ToBuffer()

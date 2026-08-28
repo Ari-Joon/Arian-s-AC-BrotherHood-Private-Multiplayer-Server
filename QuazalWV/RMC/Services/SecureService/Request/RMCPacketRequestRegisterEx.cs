@@ -65,7 +65,7 @@ namespace QuazalWV
                 sb.AppendLine("\t\t\t[\"" + s + "\"]");
             sb.AppendLine("\t[Username     : " + username + "]");
             sb.AppendLine("\t[Online Key   : " + onlineKey + "]");
-            sb.AppendLine("\t[Password     : " + password + "]");
+            sb.AppendLine("\t[Password     : " + "<redacted>" + "]");
             return sb.ToString();
         }
     }

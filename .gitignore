@@ -53,3 +53,6 @@ ACB RDV/bin/x86/Release/ACBRDV.exe
 ACB RDV/bin/x86/Release/QuazalWV.dll
 QuazalWV/bin/x86/Release/QuazalWV.dll
 DDLParserWV/bin/*
+
+# Launcher preferences (per-user)
+tools/settings.json

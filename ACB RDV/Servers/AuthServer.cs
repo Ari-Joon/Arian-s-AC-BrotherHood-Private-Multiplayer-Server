@@ -13,6 +13,7 @@ namespace AcbRdv
         public static bool _exit = false;
         public static ushort listenPort = 21030;
         private static UdpClient listener;
+        private static string ip = Global.ServerBindAddress;
         public static ushort _skipNextNAT = 0xFFFF;
 
         public static void Start()
@@ -34,7 +35,7 @@ namespace AcbRdv
         public static void tMainThread(object obj)
         {
             WriteLog(1, "Server started");
-            listener = new UdpClient(listenPort);
+            listener = new UdpClient(new IPEndPoint(IPAddress.Parse(ip), listenPort));
             IPEndPoint ep = new IPEndPoint(IPAddress.Any, 0);
             while (true)
             {

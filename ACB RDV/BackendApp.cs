@@ -13,6 +13,8 @@ namespace AcbRdv
             Log.box = richTextBox1;
             DbHelper.Init();
             toolStripComboBox1.SelectedIndex = 0;
+            // Auto-start the services so launching the exe is enough to run the server.
+            Shown += (s, e) => toolStripButton1_Click(s, EventArgs.Empty);
         }
 
         private void toolStripButton1_Click(object sender, EventArgs e)

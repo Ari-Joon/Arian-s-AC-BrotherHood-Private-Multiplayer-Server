@@ -38,6 +38,31 @@ namespace QuazalWV
             return result;
         }
 
+        /// <summary>
+        /// Parameterised overload. Use this whenever any part of the query
+        /// originates from a network packet.
+        /// </summary>
+        public static List<List<string>> GetQueryResults(string query, Dictionary<string, object> parameters)
+        {
+            List<List<string>> result = new List<List<string>>();
+            using (SQLiteCommand command = new SQLiteCommand(query, connection))
+            {
+                foreach (KeyValuePair<string, object> p in parameters)
+                    command.Parameters.AddWithValue(p.Key, p.Value);
+                using (SQLiteDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        List<string> entry = new List<string>();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                            entry.Add(reader[i].ToString());
+                        result.Add(entry);
+                    }
+                }
+            }
+            return result;
+        }
+
         public static DbRelationshipResult AddFriendRequest(uint requester, uint requestee, uint details)
         {
             // verify users exist beforehand
@@ -360,7 +385,7 @@ namespace QuazalWV
         public static List<Privilege> GetPrivileges(string locale)
         {
             List<Privilege> privileges = new List<Privilege>();
-            List<List<string>> results = GetQueryResults($"SELECT * FROM privileges WHERE locale='{locale}'");
+            List<List<string>> results = GetQueryResults("SELECT * FROM privileges WHERE locale = @locale", new Dictionary<string, object> { { "@locale", locale } });
             if (results.Count == 0)
                 Log.WriteLine(1, $"Unknown locale: {locale}", LogSource.DB, Color.Red);
 
