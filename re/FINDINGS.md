@@ -99,9 +99,8 @@ OptionsCharacterQuality   Brightness
 OptionsSelectedPad
 ```
 
-**`OptionsReflectionQuality` and `OptionsCharacterQuality` are not exposed in
-the in-game options menu.** These are the most promising leads for raising
-visual fidelity beyond what the UI allows.
+These map to the in-game menu entries and are **all clamped** — see above.
+Tested: raising them beyond the menu maximum does not stick.
 
 ### `[Input]` / `[Player]` / `[Startup]`
 
@@ -140,12 +139,11 @@ touching the binary at all.
 
 ## Suggested next steps
 
-1. Change a graphics setting in-game, quit, then locate the written
-   `ACBrotherhoodMP.ini`. That confirms the path and reveals real key/value
-   formatting.
-2. Try the undocumented quality keys (`OptionsReflectionQuality`,
-   `OptionsCharacterQuality`) at higher values than the menu allows.
-3. Inspect `multi\DefaultBindings.map` — it exists and is only 17 KB.
+1. ~~Locate the written INI~~ — **done**, see above.
+2. ~~Try quality keys above the menu maximum~~ — **done, they clamp.**
+3. Inspect `multi\DefaultBindings.map` — it exists and is only 17 KB. Combined
+   with the editable `[Keyboard*]` sections, this is the open surface for
+   remapping.
 4. For genuine code work, load `ACBMP.exe` into Ghidra (free) and start at the
    `GetPrivateProfileStringW` imports; the call sites name every INI key the
    game reads, which is a far better index than guessing from strings.
