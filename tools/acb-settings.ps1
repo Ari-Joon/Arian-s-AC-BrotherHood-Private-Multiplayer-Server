@@ -53,33 +53,20 @@ $accounts = @(sqlite3 "$db" "SELECT name FROM users WHERE name <> 'Tracking' ORD
 if (-not $accounts) { $accounts = @('Player') }
 
 # --- real screen size, without making this process DPI-aware ------------------
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-public struct DEVMODEA {
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
-    public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
-    public int dmFields;
-    public int dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
-    public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight;
-    public int dmDisplayFlags, dmDisplayFrequency;
-    public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType;
-    public int dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
-}
-public class Disp {
-    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
-    public static extern bool EnumDisplaySettingsA(string dev, int mode, ref DEVMODEA dm);
-}
-"@
-
-$dm = New-Object DEVMODEA
-$dm.dmSize = [System.Runtime.InteropServices.Marshal]::SizeOf([type][DEVMODEA])
+# Screen.PrimaryScreen.Bounds would return DPI-scaled values here (e.g. 1707x1067
+# on a 2560x1600 panel at 150%), so ask the display adapter for its actual mode.
+# Hybrid-graphics laptops expose several controllers; take the largest.
 $nativeW = 1920; $nativeH = 1080
-if ([Disp]::EnumDisplaySettingsA([NullString]::Value, -1, [ref]$dm)) {   # ENUM_CURRENT_SETTINGS
-    $nativeW = $dm.dmPelsWidth; $nativeH = $dm.dmPelsHeight
-}
+try {
+    $mode = Get-CimInstance Win32_VideoController -ErrorAction Stop |
+            Where-Object { $_.CurrentHorizontalResolution -gt 0 } |
+            Sort-Object { [long]$_.CurrentHorizontalResolution * [long]$_.CurrentVerticalResolution } -Descending |
+            Select-Object -First 1
+    if ($mode) {
+        $nativeW = [int]$mode.CurrentHorizontalResolution
+        $nativeH = [int]$mode.CurrentVerticalResolution
+    }
+} catch { }
 
 $standard = @(
     @(1280,720), @(1366,768), @(1440,900), @(1600,900), @(1680,1050),
