@@ -21,7 +21,6 @@ nupkg/
 *.bin
 *.config
 ACB RDV/App.config
-!App.config
 *.ipch
 *.cache
 *.resources

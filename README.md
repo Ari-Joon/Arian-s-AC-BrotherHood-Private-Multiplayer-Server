@@ -56,7 +56,13 @@ powershell -File tools\rename-player.ps1 -List
 
 ### 3. Point the server at an address
 
-Set `SecureServerAddress` in `ACB RDV/App.config` to the IP players will reach you on:
+`App.config` is per-user and not tracked. Copy the template:
+
+```
+copy "ACB RDV\App.config.example" "ACB RDV\App.config"
+```
+
+Then set `SecureServerAddress` to the IP players will reach you on:
 
 ```xml
 <appSettings>
