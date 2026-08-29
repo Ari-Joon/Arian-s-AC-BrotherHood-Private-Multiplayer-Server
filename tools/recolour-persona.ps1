@@ -23,18 +23,25 @@
 #>
 [CmdletBinding(DefaultParameterSetName = 'Apply')]
 param(
-    [Parameter(Mandatory)]
-    [string]$Persona,
+    # A persona name, or -All for every persona that is unpacked.
+    [string]$Persona = '',
+
+    [switch]$All,
+
+    # Personas to skip in -All mode, e.g. one you have already styled
+    # differently and do not want reset.
+    [string[]]$Exclude = @(),
 
     [Parameter(ParameterSetName = 'Apply')]
     [ValidateSet('gold_black', 'crimson_black', 'emerald_black', 'sapphire_black',
-                 'bone_white', 'desaturate')]
+                 'bone_white', 'desaturate', 'vibrant', 'vibrant_soft',
+                 'vibrant_strong')]
     [string]$Scheme = 'gold_black',
 
     # Blocks more colourful than this keep their own colour, so leather, wood
     # and metal survive while near-grey cloth is recoloured.
     [Parameter(ParameterSetName = 'Apply')]
-    [int]$MaxSaturation = 25,
+    [int]$MaxSaturation = -1,     # -1 = pick a sensible default for the scheme
 
     # Atlas cells to leave alone entirely, e.g. "G2,H2,H3,H4".
     [Parameter(ParameterSetName = 'Apply')]
@@ -62,6 +69,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# A vibrance scheme keeps every hue and just deepens it, so there is nothing to
+# protect - masking would leave the fittings flat while the cloth got richer.
+if ($MaxSaturation -lt 0) {
+    $MaxSaturation = if ($Scheme -like 'vibrant*') { 0 } else { 25 }
+}
+
 $root    = Join-Path $GamePath "multi\Extracted\DataPC.forge\Extracted"
 $backups = Join-Path $GamePath "multi\_persona_backup"
 $engine  = Join-Path $PSScriptRoot "recolour_texture.py"
@@ -70,8 +83,19 @@ if (-not (Test-Path $root))   { Write-Host "Not unpacked: multi\DataPC.forge" -F
 if (-not (Test-Path $engine)) { Write-Host "Missing $engine" -ForegroundColor Red; exit 1 }
 
 # Which resources belong to this persona, and which are unpacked yet.
-$containers = Get-ChildItem -Path (Split-Path $root) -Filter "*.data" -File |
-              Where-Object { $_.Name -like "*$Persona*" }
+if (-not $All -and -not $Persona) {
+    Write-Host "Give -Persona <name> or -All." -ForegroundColor Yellow
+    exit 1
+}
+$containers = Get-ChildItem -Path (Split-Path $root) -Filter "*_Set.data" -File
+if (-not $All) {
+    $containers = $containers | Where-Object { $_.Name -like "*$Persona*" }
+} elseif ($Exclude.Count) {
+    $containers = $containers | Where-Object {
+        $n = $_.Name
+        -not ($Exclude | Where-Object { $n -like "*$_*" })
+    }
+}
 if (-not $IncludeHead) {
     $containers = $containers | Where-Object { $_.Name -notmatch 'head' }
 }
@@ -93,11 +117,12 @@ foreach ($c in $containers) {
 }
 
 Write-Host ""
-Write-Host "Persona '$Persona'" -ForegroundColor Cyan
+Write-Host $(if ($All) { "All unpacked personas" } else { "Persona '$Persona'" }) -ForegroundColor Cyan
 foreach ($t in $textures) { Write-Host ("   ready    " + $t.Name) -ForegroundColor Green }
-foreach ($m in $missing)  { Write-Host ("   UNPACK   " + $m) -ForegroundColor Yellow }
+if (-not $All) { foreach ($m in $missing) { Write-Host ("   UNPACK   " + $m) -ForegroundColor Yellow } }
+elseif ($missing.Count) { Write-Host ("   " + $missing.Count + " more not unpacked yet") -ForegroundColor DarkGray }
 
-if ($missing.Count) {
+if ($missing.Count -and -not $All) {
     Write-Host ""
     Write-Host "Unpack the above in AnvilToolkit, then rerun." -ForegroundColor Yellow
 }
@@ -131,30 +156,47 @@ if ($Restore) {
     return
 }
 
-# Measure the tonal range once, from whichever texture is still pristine, so
-# every piece of the outfit lands on the same part of the ramp.
-if (-not $Levels) {
-    $probe = $textures[0]
-    $pb = Backup-Path $probe.Name
-    $src = if (Test-Path $pb) { $pb } else { $probe.FullName }
-    $out = & python $engine --texture $src --scheme $Scheme --dry-run 2>&1
-    $line = $out | Where-Object { $_ -match 'black\s+([\d.]+)\s+white\s+([\d.]+)' }
-    if ($line -and $line -match 'black\s+([\d.]+)\s+white\s+([\d.]+)') {
-        $Levels = "{0}:{1}" -f $Matches[1], $Matches[2]
-        Write-Host ""
-        Write-Host "   measured tonal range $Levels from $($probe.Name)" -ForegroundColor DarkGray
+# Group textures by the persona they belong to, so an upper and lower half
+# share one tonal range. Measuring each separately lets the halves drift apart
+# in contrast, which is visible on the model as a mismatched outfit.
+function Persona-Key([string]$name) {
+    $k = $name -replace '^\d+_-_', '' -replace '\.TextureMap$', '' -replace '^\d+_-_', ''
+    $k = $k -replace '_DiffuseMap$', ''
+    foreach ($suffix in @('Up','Upper','Bottom','Down','Haut','Bas','Top','Low','LOD2','LOD')) {
+        $k = $k -replace ("(?i)" + $suffix + '$'), ''
     }
+    $k = $k -replace '(?i)_?Custom\d*$', '' -replace '_+$', ''
+    if (-not $k) { $k = $name }
+    return $k
 }
 
 Write-Host ""
-foreach ($t in $textures) {
-    Write-Host ("-- " + $t.Name) -ForegroundColor Cyan
-    $argv = @('--texture', $t.FullName, '--scheme', $Scheme,
-              '--backup', (Backup-Path $t.Name), '--max-saturation', $MaxSaturation)
-    if ($Levels)  { $argv += @('--levels', $Levels) }
-    if ($Keep)    { $argv += @('--keep', $Keep) }
-    if ($DryRun)  { $argv += '--dry-run' }
-    & python $engine @argv
+$groups = $textures | Group-Object { Persona-Key $_.Name }
+foreach ($grp in $groups) {
+    $groupLevels = $Levels
+    if (-not $groupLevels) {
+        # Measure from the first member of this persona, reading its pristine
+        # backup when one exists so a re-run does not measure its own output.
+        $probe = $grp.Group[0]
+        $pb = Backup-Path $probe.Name
+        $src = if (Test-Path $pb) { $pb } else { $probe.FullName }
+        $out = & python $engine --texture $src --scheme $Scheme --dry-run 2>&1
+        $line = $out | Where-Object { $_ -match 'black\s+([\d.]+)\s+white\s+([\d.]+)' }
+        if ($line -and $line -match 'black\s+([\d.]+)\s+white\s+([\d.]+)') {
+            $groupLevels = "{0}:{1}" -f $Matches[1], $Matches[2]
+        }
+    }
+    Write-Host ("== " + $grp.Name + "   (" + $grp.Count + " texture(s), levels " +
+                $(if ($groupLevels) { $groupLevels } else { "auto" }) + ")") -ForegroundColor Magenta
+    foreach ($t in $grp.Group) {
+        Write-Host ("-- " + $t.Name) -ForegroundColor Cyan
+        $argv = @('--texture', $t.FullName, '--scheme', $Scheme,
+                  '--backup', (Backup-Path $t.Name), '--max-saturation', $MaxSaturation)
+        if ($groupLevels) { $argv += @('--levels', $groupLevels) }
+        if ($Keep)   { $argv += @('--keep', $Keep) }
+        if ($DryRun) { $argv += '--dry-run' }
+        & python $engine @argv
+    }
 }
 
 Write-Host ""

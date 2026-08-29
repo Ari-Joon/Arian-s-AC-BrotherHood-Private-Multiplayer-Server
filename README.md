@@ -176,7 +176,7 @@ python tools/recolour_texture.py --texture "<path>\1_-_BarberUp_DiffuseMap.Textu
 
 | Option | Purpose |
 |---|---|
-| `--scheme` | `gold_black`, `crimson_black`, `emerald_black`, `sapphire_black`, `bone_white`, `desaturate` |
+| `--scheme` | Repaint: `gold_black`, `crimson_black`, `emerald_black`, `sapphire_black`, `bone_white`, `desaturate`. Enhance: `vibrant`, `vibrant_soft`, `vibrant_strong` |
 | `--strength` | `0.0`–`1.0`, blend towards the scheme |
 | `--grid` | Render a labelled `A1..H8` overlay of the atlas |
 | `--keep` | Hold cells (`G2,H2`) or rects (`x0:y0:x1:y1`) at original colours |

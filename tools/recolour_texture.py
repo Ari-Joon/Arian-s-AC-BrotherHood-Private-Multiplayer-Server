@@ -92,6 +92,10 @@ def enc565(r, g, b):
     return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
 
 
+def clampf(v, lo, hi):
+    return lo if v < lo else hi if v > hi else v
+
+
 def ramp_at(stops, t):
     if t <= stops[0][0]:
         return stops[0][1]
@@ -133,6 +137,18 @@ SCHEMES = {
         desc="Bleached bone white"),
     "desaturate": dict(kind="hue", rotate=0.0, sat=0.0,
                        desc="Greyscale, tones untouched"),
+
+    # Keep every hue exactly, push saturation and tonal range. This is the one
+    # to use on a persona you want to stay recognisably itself - richer, not
+    # different. Vibrance rather than a flat saturation multiply: dull colours
+    # gain the most and already-vivid ones barely move, so nothing clips to a
+    # solid block of colour.
+    "vibrant": dict(kind="vibrance", sat_gain=1.55, contrast=1.18, lift=0.02,
+                    desc="Original colours, deeper saturation and tonal range"),
+    "vibrant_soft": dict(kind="vibrance", sat_gain=1.28, contrast=1.08, lift=0.01,
+                         desc="As vibrant, gentler - for already-colourful personas"),
+    "vibrant_strong": dict(kind="vibrance", sat_gain=1.85, contrast=1.28, lift=0.03,
+                           desc="As vibrant, pushed hard - for washed-out personas"),
 }
 
 
@@ -189,6 +205,33 @@ def build_lut(scheme, strength=1.0, levels=None):
             t = (lum - blk) / span
             t = 0.0 if t < 0.0 else 1.0 if t > 1.0 else t
             nr, ng, nb = ramp_at(s["stops"], t ** gam)
+            if strength < 1.0:
+                nr, ng, nb = (r + (nr - r) * strength,
+                              g + (ng - g) * strength,
+                              b + (nb - b) * strength)
+            lut[v] = enc565(nr, ng, nb)
+    elif s["kind"] == "vibrance":
+        import colorsys
+        gain, contrast, lift = s["sat_gain"], s["contrast"], s["lift"]
+        blk, wht = (levels if levels else (0.0, 1.0))
+        span = max(1e-6, wht - blk)
+        for v in range(65536):
+            r, g, b = dec565(v)
+            hh, ll, ss = colorsys.rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
+            # Normalise to the texture's own range first, so a persona painted
+            # in a narrow band of greys gains real separation instead of the
+            # whole thing shifting together.
+            ln = clampf((ll - blk) / span, 0.0, 1.0)
+            ln = clampf(0.5 + (ln - 0.5) * contrast + lift, 0.0, 1.0)
+            # Vibrance: dull colours gain most, vivid ones barely move - and
+            # a neutral stays neutral. A power curve (s ** 1/gain) does the
+            # first two but not the third: it gives a near-grey with s=0.02 a
+            # sixfold boost, which turns invisible endpoint tint into visible
+            # magenta and green speckle across grey cloth. Scaling the gain by
+            # (1 - s) keeps s=0 pinned at 0.
+            sn = ss * (1.0 + (gain - 1.0) * (1.0 - ss))
+            nr, ng, nb = colorsys.hls_to_rgb(hh, ln, clampf(sn, 0.0, 1.0))
+            nr, ng, nb = nr * 255.0, ng * 255.0, nb * 255.0
             if strength < 1.0:
                 nr, ng, nb = (r + (nr - r) * strength,
                               g + (ng - g) * strength,
@@ -699,12 +742,13 @@ def main():
             sys.exit("bad --levels %r, want black:white with 0 <= black < white <= 1"
                      % a.levels)
         print("  levels: black %.2f  white %.2f (forced)" % levels)
-    elif not a.no_autolevel and SCHEMES[a.scheme]["kind"] == "ramp":
+    elif not a.no_autolevel and SCHEMES[a.scheme]["kind"] in ("ramp", "vibrance"):
         levels = measure_levels(payload, kind)
         print("  auto-levels: black %.2f  white %.2f (measured, pass --levels %.2f:%.2f "
               "to match other textures)" % (levels + levels))
     lut = build_lut(a.scheme, max(0.0, min(1.0, a.strength)), levels)
-    new, st = recolour(payload, kind, lut, w, h, mips, keep, a.max_saturation,
+    sat_max = a.max_saturation if a.max_saturation else None
+    new, st = recolour(payload, kind, lut, w, h, mips, keep, sat_max,
                        a.mask_coherence, only, a.strong_saturation)
     print("  scheme '%s' - %s" % (a.scheme, SCHEMES[a.scheme]["desc"]))
     print("  %d blocks: %d recoloured, %d kept original"
