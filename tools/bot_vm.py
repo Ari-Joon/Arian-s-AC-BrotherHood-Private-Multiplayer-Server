@@ -132,14 +132,19 @@ TIERS = {
 class Contact:
     """Everything a bot is allowed to know about another body on screen."""
 
-    __slots__ = ("bearing", "distance", "facing", "match", "moving")
+    __slots__ = ("bearing", "distance", "facing", "match", "moving", "truth")
 
-    def __init__(self, bearing, distance, facing, match, moving=False):
+    def __init__(self, bearing, distance, facing, match, moving=False, truth=None):
         self.bearing = bearing      # degrees from screen centre, -180..180
         self.distance = distance    # 0..1 apparent closeness, 1 = arm's reach
         self.facing = facing        # degrees; 0 = looking straight at the bot
         self.match = match          # 0..1 appearance match to the target
         self.moving = moving
+        # Ground truth, set only by the simulator and ONLY read by the scoring
+        # harness. The bot must never look at it - judging a kill by the bot's
+        # own match score instead measures how confident it was, not whether it
+        # was right, and every tier then scores near 100%.
+        self.truth = truth
 
     def __repr__(self):
         return ("contact(bearing=%+.0f dist=%.2f facing=%+.0f match=%.2f%s)"
@@ -179,7 +184,19 @@ class SimPerception(Perception):
     behave differently.
     """
 
-    def __init__(self, rng, target_persona, crowd=6):
+    def __init__(self, rng, target_persona, crowd=6, doubles=2):
+        """
+        The crowd contains DOUBLES: civilians wearing the target's own persona,
+        visually identical to it. That is the game's central mechanic, and
+        without it appearance alone identifies the target and every tier scores
+        perfectly - which is what the first version of this simulator did.
+
+        What separates a player from a civilian is behaviour, and the only
+        behavioural channel a bot is allowed is FACING. Civilians walk a fixed
+        heading; a player looks around, and turns towards whatever it is
+        watching. Reading that takes repeated observation, which is precisely
+        what the tiers differ on.
+        """
         self.rng = rng
         self.target_persona = target_persona
         self.bodies = []
@@ -189,6 +206,9 @@ class SimPerception(Perception):
                 "distance": rng.uniform(0.05, 0.5),
                 "facing": rng.uniform(-180, 180),
                 "is_target": i == 0,
+                # A double is indistinguishable by appearance.
+                "double": 0 < i <= doubles,
+                "drift": rng.uniform(-4, 4),      # civilians hold a heading
             })
 
     def step(self, bot_turn=0.0, bot_advance=0.0):
@@ -197,7 +217,10 @@ class SimPerception(Perception):
             if abs(b["bearing"]) < 60:
                 b["distance"] += bot_advance * self.rng.uniform(0.5, 1.0)
             b["distance"] = clamp(b["distance"] + self.rng.uniform(-0.03, 0.03), 0.02, 1.0)
-            b["facing"] = wrap(b["facing"] + self.rng.uniform(-25, 25))
+            if b["is_target"]:
+                b["facing"] = wrap(b["facing"] + self.rng.uniform(-40, 40))  # looks around
+            else:
+                b["facing"] = wrap(b["facing"] + b["drift"])                 # holds a heading
 
     def sense(self):
         out = []
@@ -206,13 +229,13 @@ class SimPerception(Perception):
                 continue
             # Appearance match degrades with distance, the way a real face does.
             clarity = clamp(b["distance"] * 1.6, 0.0, 1.0)
-            if b["is_target"]:
-                m = 0.5 + 0.5 * clarity
+            if b["is_target"] or b["double"]:
+                m = 0.5 + 0.5 * clarity          # a double reads the same
             else:
                 m = self.rng.uniform(0.0, 0.45 + 0.25 * (1 - clarity))
             out.append(Contact(b["bearing"], b["distance"], b["facing"],
                                clamp(m + self.rng.uniform(-0.05, 0.05), 0, 1),
-                               moving=True))
+                               moving=True, truth=b["is_target"]))
         return out
 
 
@@ -288,9 +311,13 @@ class Bot:
         self.locked = None
         self.observed = 0
         self.idle_ticks = 0
+        self.last_facing = None
+        self.last_bearing = None
+        self.turn_samples = []
         self.wp = 0
         self.kills = 0
         self.mistakes = 0
+        self.blown = 0
         self.events = []
 
     # -- perception -> belief ------------------------------------------------
@@ -303,10 +330,52 @@ class Bot:
         if not contacts:
             self.confidence = max(0.0, self.confidence - 0.12)
             return None
-        best = max(contacts, key=lambda c: c.match * (0.5 + 0.5 * c.distance))
+        # Prefer the body already being watched. Doubles are identical by
+        # appearance, so picking purely on appearance makes the bot flit
+        # between them and never accumulate a behavioural read on any one -
+        # which is what stopped patience from being worth anything. A human
+        # keeps their eyes on whoever they got suspicious of.
+        def score(c):
+            s = c.match * (0.5 + 0.5 * c.distance)
+            if self.last_bearing is not None and abs(wrap(c.bearing - self.last_bearing)) <= 22:
+                s += 0.35                       # stay on the one being studied
+            return s
+        best = max(contacts, key=score)
         # A face read head-on is worth more than one seen from behind.
         head_on = 1.0 - (abs(best.facing) / 180.0) * 0.45
-        evidence = best.match * head_on * (0.55 + 0.45 * best.distance)
+        appearance = best.match * head_on * (0.55 + 0.45 * best.distance)
+
+        # Appearance cannot separate a target from a double wearing the same
+        # persona, so behaviour has to. Civilians hold a heading; a player looks
+        # around. Turn rate between observations is the only tell available
+        # inside the face-and-direction constraint, and it needs repeated looks
+        # - which is what makes patience worth something.
+        # Perception has no identity - it returns bodies on screen, not IDs -
+        # so a run of facing samples is only meaningful if it came from the SAME
+        # body. Track continuity by bearing: if the best contact jumps, it is a
+        # different person and the history has to be thrown away. Without this,
+        # facing is differenced across two different bodies and the behaviour
+        # signal becomes noise, which made patience worthless.
+        if self.last_bearing is not None and abs(wrap(best.bearing - self.last_bearing)) > 22:
+            self.turn_samples = []
+            self.last_facing = None
+        self.last_bearing = best.bearing
+
+        turn = abs(wrap(best.facing - self.last_facing)) if self.last_facing is not None else None
+        self.last_facing = best.facing
+        if turn is not None:
+            self.turn_samples.append(turn)
+            if len(self.turn_samples) > 16:
+                self.turn_samples.pop(0)
+        n = len(self.turn_samples)
+        if n >= 3:
+            avg = sum(self.turn_samples) / n
+            behaviour = clamp((avg - 6.0) / 20.0, 0.0, 1.0)
+            # A longer look is a better estimate, so weight it accordingly.
+            w = clamp(n / 16.0, 0.0, 1.0) * 0.85
+            evidence = appearance * (1 - w) + behaviour * w
+        else:
+            evidence = appearance
         # Confidence moves toward the evidence, faster the longer it is watched.
         rate = 0.25 + 0.05 * self.observed
         self.confidence += (evidence - self.confidence) * min(rate, 0.8)
@@ -382,6 +451,7 @@ class Bot:
             self.idle_ticks += 1
             if self.idle_ticks > t.lose_interest:
                 self.state, self.observed, self.locked = "patrol", 0, None
+                self.last_facing, self.last_bearing, self.turn_samples = None, None, []
             elif self.state not in ("patrol", "recover"):
                 self.state = "patrol"
         else:
@@ -406,15 +476,25 @@ class Bot:
         told = self.tell()
 
         if self.state == "strike":
-            # Committing on a civilian is exactly the mistake a human makes.
-            if contact and contact.match > 0.6:
+            # Scored against ground truth, never against what the bot believed.
+            if contact is not None and contact.truth:
                 self.kills += 1
                 self.events.append("kill")
             else:
                 self.mistakes += 1
                 self.events.append("wrong target")
             self.confidence, self.observed = 0.0, 0
+            self.last_facing, self.last_bearing, self.turn_samples = None, None, []
             self.state = "recover"
+        elif self.state == "pursue" and contact is not None:
+            # Sprinting at someone is what gets a pursuer identified. Breaking
+            # cover on a civilian costs the approach and resets the hunt, which
+            # is the cost an impatient tier should actually pay.
+            if not contact.truth and self.rng.random() < t.sprint_bias:
+                self.blown += 1
+                self.events.append("blown cover")
+                self.confidence, self.observed = 0.0, 0
+                self.state = "recover"
 
         return {
             "state": prev if prev == self.state else "%s->%s" % (prev, self.state),
@@ -484,11 +564,12 @@ def main():
                       % (tick, b.name, r["state"], r["confidence"], tl, ev))
 
     print("")
-    print("  %-6s %-9s %-8s %-9s %s" % ("bot", "tier", "kills", "mistakes", "accuracy"))
+    print("  %-6s %-9s %-7s %-9s %-7s %s" % ("bot", "tier", "kills", "mistakes", "blown", "accuracy"))
     for b in bots:
         tot = b.kills + b.mistakes
         acc = ("%.0f%%" % (100.0 * b.kills / tot)) if tot else "-"
-        print("  %-6s %-9s %-8d %-9d %s" % (b.name, b.tier.name, b.kills, b.mistakes, acc))
+        print("  %-6s %-9s %-7d %-9d %-7d %s"
+              % (b.name, b.tier.name, b.kills, b.mistakes, b.blown, acc))
     print("")
 
 

@@ -306,34 +306,49 @@ to a location — `GOTO`, `WANDER`, `LOOK`, `OBSERVE`, `STALK`, `PURSUE`, `KILL`
 only bearing, apparent distance, facing and appearance match. Confidence builds
 by watching, and each tier needs a different amount before committing:
 
-| Tier | Commits at | Patience | Sprints | Tells |
-|---|---|---|---|---|
-| `assassin` | 0.82 confidence | 7 ticks observing | rarely — it breaks stealth | 6% |
-| `hunter` | 0.62 | 4 ticks | sometimes | 14% |
-| `brute` | 0.38 | 1 tick | readily | 28% |
+| Tier | Commits at | Patience | Sprints | Tells | Accuracy |
+|---|---|---|---|---|---|
+| `assassin` | 0.82 confidence | 7 ticks observing | 0% | 6% | **52%** |
+| `hunter` | 0.62 | 4 ticks | 2% | 14% | 46% |
+| `brute` | 0.38 | 1 tick | 6% | 27% | 39% |
 
-That difference is what produces the running and chasing: a brute commits on
-weak evidence and is often wrong, an assassin waits and gets the silent kill.
-Bots are deliberately imperfect — overshooting turns, hesitating, doubling back
-— because a bot that never errs reads as a bot.
+Accuracy is over 60 runs of 120 ticks, scored against **ground truth** the bot
+cannot see. A random guess scores 33%.
+
+That baseline exists because the simulated crowd contains **doubles** —
+civilians wearing the target's own persona, visually identical to it. That is
+the game's central mechanic, and without it appearance alone identifies the
+target and every tier scores 100%, which is exactly what the first version of
+this simulator did.
+
+With doubles present, appearance cannot discriminate and **behaviour has to**.
+The only behavioural channel inside the face-and-direction constraint is
+*facing*: civilians hold a heading, a player looks around. Reading that takes
+repeated observation of **the same body**, which is what makes patience worth
+something — and what makes the impatient tier wrong most of the time.
 
 ```
 python tools/bot_vm.py --simulate --ticks 40 --seed 7
 ```
 
-**Status.** Everything above the perception boundary runs against a built-in
-simulated world, so the state machine, tiers, navigation and tells are testable
-without the game. **Perception is not solved** — `ScreenPerception` needs the
-compass and target indicator located in screen space at your resolution and HUD
-scale, and that calibration has not been done. It returns nothing rather than
-guessing, because a bot that hallucinates contacts is worse than one that stands
-still.
+**Honest reading of those numbers.** The ordering is monotonic and matches the
+design, and the behavioural metrics (sprint rate, tell rate, blown cover)
+separate cleanly. The accuracy gap between `assassin` and `hunter` is only about
+1.2 standard deviations, because the patient tier commits rarely and so has a
+small sample — treat it as suggestive, not established. `brute` versus the
+others is solid.
 
-The simulated *outcomes* are also not yet trustworthy: across 30 runs all three
-tiers scored near 100% accuracy, because the fake world has no penalty for being
-spotted and no failed-approach path. The tiers differ correctly in behaviour
-(sprint rate 0/1/4%, tell rate 5/14/28%) but the scoring model needs work before
-its kill numbers mean anything.
+**Perception is still the blocker.** `ScreenPerception` returns nothing:
+locating the compass and target indicator in screen space at a given resolution
+and HUD scale has not been done. Everything above that boundary is tested; below
+it, nothing is. A bot that hallucinates contacts is worse than one that stands
+still, so it returns nothing rather than guessing.
+
+**For putting a body in a match, perception may not be needed at all.** Ability
+challenges need another live player present, not a skilled one — the game
+assigns contracts, so a bot that logs in, joins and moves plausibly is enough to
+generate the situations a challenge scores. That is a far lower bar than target
+identification and does not depend on any of the above.
 
 ---
 
