@@ -274,29 +274,63 @@ inflates: `PlayerProgressionSaveData`,
 `SaveGameAction_SaveProfileOptions` / `LoadProfileOptions`, which is what makes
 `OPTIONS` the profile blob.
 
-### Attempted and NOT working
+### SOLVED - the save inflates
 
-Calling `Manager.Decompress` with a hand-sliced payload **crashes native LZO
-with an access violation** at every offset swept (M+24 to M+40, lengths +/-8).
-The crash kills the process, so each attempt needs its own subprocess and the
-sweep is slow as well as fruitless.
+Use **`CompressedFileData`**, not `Manager.Decompress`.
+`AnvilToolkit.FileTypes.AnvilNext.Containers.CompressedFileData` has
+`ctor(BinaryReader br, Game Version, bool metaData)`. Seek the reader to a chunk
+header offset, construct it, read the `Data` property. Verified twice,
+independently:
 
-Feeding the file to `DataBlock.Read` with a `CompressionInfo` parsed from the
-stream does not work either. At offset 0 it returns 197 bytes that are
-**byte-identical to `raw[12:209]`** - raw passthrough, not decompression,
-because the `CompressionInfo` it parsed is garbage (`Algorithm=251`,
-`BlockSize=83532119` when started at the magic).
+| chunk | declared | Data | reader ends |
+|---|---|---|---|
+| `.SAV` `0x010` | 284 | 284 | 221 |
+| `.SAV` `0x0ed` | **252,401** | 252,401 | 21,124 = EOF exactly |
 
-A false positive worth recording: that output contains the readable string
-`Options`, which looks like a decompression success and is not - `Options` is
-present in the raw file too. Check any apparent plaintext against the raw bytes
-before believing it.
+**The header sizes are per-BLOCK, not per-chunk.** The `32768` at `M+20` is the
+first *block's* uncompressed size; the chunk is multi-block and inflates to
+252,401. `CompressedFileData` exposes `BlockInfoData` - there is a block table
+that hand-parsing does not account for. This is why offsets that were
+arithmetically correct (chunk 0's payload ending exactly where chunk 1's header
+begins) still produced garbage: the payload is not one LZO stream.
 
-**Conclusion:** the `.data` path is solved and batch unpacking works, but save
-files are **not** `.data` containers. Their outer structure differs, so
-`DataFile`/`DataBlock` cannot parse them as-is. The next honest step is to find
-whichever AnvilToolkit type reads save files, or to work out the save's own
-outer header rather than assuming it matches an archive.
+### Four things that waste a day if you meet them cold
+
+1. **`Manager.InitializeAll()` hangs.** Not slow - it does not return. Do not
+   call it.
+2. **`Manager` must be constructed properly.** It has `ctor(bool initialize)`,
+   and `LZO` has an instance field `byte[] Mem` that the decompressor writes
+   through. `GetUninitializedObject` leaves it null and you get an access
+   violation inside `lzo1x_decompress`.
+3. **LZO1X has no bounds checking**, so every wrong offset dies with
+   `0xC0000005` rather than an error, killing the process. Offset sweeping is
+   useless as a search strategy: "wrong by 4 bytes" and "wrong by 4000" give an
+   identical fatal crash.
+4. **Check apparent plaintext against the raw bytes.** `DataBlock.Read` at
+   offset 0 returns 197 bytes that are byte-identical to `raw[12:209]` - raw
+   passthrough - and they contain the readable string `Options`, which looks
+   exactly like a decompression success. `Options` is in the raw file too.
+
+`GetCompressionAlgorithm` takes **four** parameters:
+`(int AlgoIndex, int AlgoVersion, Game Version, bool Lock)`.
+
+### What is inflated, and what is still unknown
+
+The 252,401-byte payload is **hash-keyed binary**: 56% zero bytes and only 8
+ASCII runs of five characters or more in the whole file, none of them field
+names. Field names are hashed, so the challenge flags are **not greppable**.
+Inflating the file and locating the flags are different results, and only the
+first is done.
+
+Schema types the toolkit already has, in
+`AnvilToolkit.FileTypes.AnvilNext.Schema.BaseTypes`:
+`AccomplishmentManagerSavegameData`, `PlayerOptionsSaveData`, `SaveData`,
+`SaveGame` - each with `ctor(BinaryReader br, uint hash, bool _IsSaveGame)`.
+
+**Cheapest way forward is a differential, not schema decoding.** Now that
+inflation works: capture an inflated baseline, play one challenge step, exit
+cleanly, re-inflate, and diff 252 KB against 252 KB. That localises the flags
+without decoding anything.
 
 ### Unclaimed lead, for whoever owns netcode
 
