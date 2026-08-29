@@ -1,0 +1,335 @@
+{
+  "Barber": {
+    "note": "Cells are from the --grid overlay. 'cloth' and 'fittings' were derived from mean saturation; rename and split them into real parts (tunic, belt, boots) as you identify them.",
+    "parts": {
+      "1_-_BarberUp_DiffuseMap.TextureMap": {
+        "cloth": [
+          "A1",
+          "A2",
+          "A3",
+          "A4",
+          "A5",
+          "A6",
+          "A7",
+          "A8",
+          "B1",
+          "B2",
+          "B3",
+          "B4",
+          "B5",
+          "B6",
+          "B7",
+          "B8",
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "C6",
+          "C7",
+          "C8",
+          "D1",
+          "D2",
+          "D3",
+          "D4",
+          "D5",
+          "D6",
+          "D7",
+          "D8",
+          "E1",
+          "E2",
+          "E3",
+          "E4",
+          "E5",
+          "E6",
+          "E7",
+          "E8",
+          "F1",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F7",
+          "G1",
+          "G2",
+          "G3",
+          "G4",
+          "G5",
+          "G6",
+          "H1",
+          "H2",
+          "H3",
+          "H4",
+          "H5",
+          "H7",
+          "H8"
+        ],
+        "fittings": [
+          "F6",
+          "F8",
+          "G7",
+          "G8",
+          "H6"
+        ]
+      }
+    },
+    "measured": {
+      "A1": {
+        "colourful": 0.0,
+        "brightness": 54.4
+      },
+      "A2": {
+        "colourful": 0.0,
+        "brightness": 56.8
+      },
+      "A3": {
+        "colourful": 0.116,
+        "brightness": 54.2
+      },
+      "A4": {
+        "colourful": 0.131,
+        "brightness": 55.5
+      },
+      "A5": {
+        "colourful": 0.004,
+        "brightness": 66.1
+      },
+      "A6": {
+        "colourful": 0.027,
+        "brightness": 30.6
+      },
+      "A7": {
+        "colourful": 0.033,
+        "brightness": 28.4
+      },
+      "A8": {
+        "colourful": 0.005,
+        "brightness": 17.8
+      },
+      "B1": {
+        "colourful": 0.0,
+        "brightness": 58.9
+      },
+      "B2": {
+        "colourful": 0.0,
+        "brightness": 67.4
+      },
+      "B3": {
+        "colourful": 0.0,
+        "brightness": 63.2
+      },
+      "B4": {
+        "colourful": 0.0,
+        "brightness": 49.4
+      },
+      "B5": {
+        "colourful": 0.068,
+        "brightness": 55.4
+      },
+      "B6": {
+        "colourful": 0.135,
+        "brightness": 43.8
+      },
+      "B7": {
+        "colourful": 0.003,
+        "brightness": 35.7
+      },
+      "B8": {
+        "colourful": 0.009,
+        "brightness": 69.7
+      },
+      "C1": {
+        "colourful": 0.0,
+        "brightness": 46.5
+      },
+      "C2": {
+        "colourful": 0.0,
+        "brightness": 59.9
+      },
+      "C3": {
+        "colourful": 0.0,
+        "brightness": 67.8
+      },
+      "C4": {
+        "colourful": 0.0,
+        "brightness": 66.5
+      },
+      "C5": {
+        "colourful": 0.002,
+        "brightness": 64.3
+      },
+      "C6": {
+        "colourful": 0.0,
+        "brightness": 57.9
+      },
+      "C7": {
+        "colourful": 0.0,
+        "brightness": 54.5
+      },
+      "C8": {
+        "colourful": 0.005,
+        "brightness": 110.4
+      },
+      "D1": {
+        "colourful": 0.0,
+        "brightness": 33.9
+      },
+      "D2": {
+        "colourful": 0.0,
+        "brightness": 43.5
+      },
+      "D3": {
+        "colourful": 0.0,
+        "brightness": 56.3
+      },
+      "D4": {
+        "colourful": 0.0,
+        "brightness": 62.5
+      },
+      "D5": {
+        "colourful": 0.0,
+        "brightness": 58.2
+      },
+      "D6": {
+        "colourful": 0.0,
+        "brightness": 51.7
+      },
+      "D7": {
+        "colourful": 0.042,
+        "brightness": 40.4
+      },
+      "D8": {
+        "colourful": 0.088,
+        "brightness": 53.5
+      },
+      "E1": {
+        "colourful": 0.0,
+        "brightness": 51.3
+      },
+      "E2": {
+        "colourful": 0.0,
+        "brightness": 64.4
+      },
+      "E3": {
+        "colourful": 0.0,
+        "brightness": 70.4
+      },
+      "E4": {
+        "colourful": 0.0,
+        "brightness": 69.1
+      },
+      "E5": {
+        "colourful": 0.0,
+        "brightness": 45.6
+      },
+      "E6": {
+        "colourful": 0.0,
+        "brightness": 46.0
+      },
+      "E7": {
+        "colourful": 0.118,
+        "brightness": 36.3
+      },
+      "E8": {
+        "colourful": 0.18,
+        "brightness": 40.3
+      },
+      "F1": {
+        "colourful": 0.0,
+        "brightness": 45.0
+      },
+      "F2": {
+        "colourful": 0.0,
+        "brightness": 58.9
+      },
+      "F3": {
+        "colourful": 0.0,
+        "brightness": 65.1
+      },
+      "F4": {
+        "colourful": 0.0,
+        "brightness": 61.5
+      },
+      "F5": {
+        "colourful": 0.041,
+        "brightness": 56.4
+      },
+      "F6": {
+        "colourful": 0.262,
+        "brightness": 38.6
+      },
+      "F7": {
+        "colourful": 0.187,
+        "brightness": 44.0
+      },
+      "F8": {
+        "colourful": 0.323,
+        "brightness": 29.2
+      },
+      "G1": {
+        "colourful": 0.008,
+        "brightness": 42.0
+      },
+      "G2": {
+        "colourful": 0.003,
+        "brightness": 70.9
+      },
+      "G3": {
+        "colourful": 0.019,
+        "brightness": 42.9
+      },
+      "G4": {
+        "colourful": 0.035,
+        "brightness": 61.5
+      },
+      "G5": {
+        "colourful": 0.072,
+        "brightness": 61.6
+      },
+      "G6": {
+        "colourful": 0.055,
+        "brightness": 51.3
+      },
+      "G7": {
+        "colourful": 0.316,
+        "brightness": 55.6
+      },
+      "G8": {
+        "colourful": 0.405,
+        "brightness": 30.2
+      },
+      "H1": {
+        "colourful": 0.021,
+        "brightness": 40.4
+      },
+      "H2": {
+        "colourful": 0.003,
+        "brightness": 46.3
+      },
+      "H3": {
+        "colourful": 0.174,
+        "brightness": 49.8
+      },
+      "H4": {
+        "colourful": 0.249,
+        "brightness": 54.6
+      },
+      "H5": {
+        "colourful": 0.166,
+        "brightness": 21.5
+      },
+      "H6": {
+        "colourful": 0.421,
+        "brightness": 43.8
+      },
+      "H7": {
+        "colourful": 0.249,
+        "brightness": 38.3
+      },
+      "H8": {
+        "colourful": 0.237,
+        "brightness": 31.6
+      }
+    }
+  }
+}

@@ -136,12 +136,17 @@ SCHEMES = {
 }
 
 
-def measure_levels(payload, kind, lo=0.02, hi=0.98):
+def measure_levels(payload, kind, lo=0.02, hi=0.999):
     """Find the texture's real tonal range, as (black, white) in 0..1.
 
     A ramp keyed to a fixed 0..1 range washes out on a dark texture and blows
     out on a bright one. Reading the actual endpoint luminance histogram makes
     one scheme land correctly on any persona.
+
+    The white point is taken high (99.9%) on purpose. At 98% a garment with a
+    small bright element - a white shirt against dark brocade - has that
+    element clipped flat, and the harder stretch also amplifies pre-existing
+    block artifacts in the source until they read as visible squares.
     """
     step, cbase, _ = KIND[kind]
     hist = [0] * 256
@@ -259,7 +264,8 @@ def sat_lut():
     return _SATLUT
 
 
-def recolour(payload, kind, lut, w, h, mips, keep=(), sat_max=None):
+def recolour(payload, kind, lut, w, h, mips, keep=(), sat_max=None,
+             coherence=5, only=()):
     """Transform every block of every mip level. Returns (data, stats).
 
     sat_max leaves already-colourful blocks alone. On a character atlas the
@@ -273,23 +279,58 @@ def recolour(payload, kind, lut, w, h, mips, keep=(), sat_max=None):
     swaps = flats = kept = done = 0
     for mo, mw, mh, msz in mip_layout(w, h, step, mips):
         bw, bh = max(1, (mw + 3) // 4), max(1, (mh + 3) // 4)
+
+        # Saturation alone is a per-block test, so a single noisy block inside
+        # a stretch of cloth reads as "colourful" and stays its original grey,
+        # leaving speckle scattered through the recoloured area. Require the
+        # neighbourhood to agree: a block is only held back when most of the
+        # 3x3 around it is also colourful. Solid leather survives, lone blocks
+        # do not.
+        mask = None
+        if sl is not None:
+            mask = bytearray(bw * bh)
+            for by in range(bh):
+                for bx in range(bw):
+                    off = mo + (by * bw + bx) * step + cbase
+                    if off + 8 > len(data):
+                        continue
+                    if (sl[data[off] | (data[off + 1] << 8)] > sat_max or
+                            sl[data[off + 2] | (data[off + 3] << 8)] > sat_max):
+                        mask[by * bw + bx] = 1
+            if coherence > 0 and bw > 2 and bh > 2:
+                grown = bytearray(bw * bh)
+                for by in range(bh):
+                    y0r, y1r = max(0, by - 1), min(bh, by + 2)
+                    for bx in range(bw):
+                        if not mask[by * bw + bx]:
+                            continue
+                        c = 0
+                        for y in range(y0r, y1r):
+                            row = y * bw
+                            for x in range(max(0, bx - 1), min(bw, bx + 2)):
+                                c += mask[row + x]
+                        if c >= coherence:
+                            grown[by * bw + bx] = 1
+                mask = grown
+
         for by in range(bh):
             cy = (by + 0.5) / bh
             for bx in range(bw):
                 off = mo + (by * bw + bx) * step + cbase
                 if off + 8 > len(data):
                     continue
-                if keep:
-                    cx = (bx + 0.5) / bw
-                    if any(x0 <= cx <= x1 and y0 <= cy <= y1
-                           for x0, y0, x1, y1 in keep):
-                        kept += 1
-                        continue
-                if sl is not None:
-                    if (sl[data[off] | (data[off + 1] << 8)] > sat_max or
-                            sl[data[off + 2] | (data[off + 3] << 8)] > sat_max):
-                        kept += 1
-                        continue
+                cx = (bx + 0.5) / bw
+                if only and not any(x0 <= cx <= x1 and y0 <= cy <= y1
+                                    for x0, y0, x1, y1 in only):
+                    kept += 1
+                    continue
+                if keep and any(x0 <= cx <= x1 and y0 <= cy <= y1
+                                for x0, y0, x1, y1 in keep):
+                    kept += 1
+                    continue
+                if mask is not None and mask[by * bw + bx]:
+                    kept += 1
+                    continue
                 done += 1
                 s = _block(data, off, lut, ordered)
                 swaps += s[0]
@@ -420,6 +461,87 @@ def write_grid(path, payload, w, h, kind, mips, level, keep=()):
     return path
 
 
+def cell_name(cx, ry):
+    return "%s%d" % (chr(65 + cx), ry + 1)
+
+
+def analyse_cells(payload, kind, w, h, mips, threshold=25):
+    """Classify each grid cell by how colourful it is.
+
+    Cloth sits near grey; leather, wood, metal and skin are strongly coloured.
+    This produces a starting region map that is derived from the texture rather
+    than guessed, ready to be renamed by hand.
+    """
+    step, cbase, _ = KIND[kind]
+    sl = sat_lut()
+    o, mw, mh, sz = mip_layout(w, h, step, mips)[0]
+    bw, bh = max(1, mw // 4), max(1, mh // 4)
+    cells = {}
+    for ry in range(GRID_ROWS):
+        for cx in range(GRID_COLS):
+            x0, x1 = cx * bw // GRID_COLS, (cx + 1) * bw // GRID_COLS
+            y0, y1 = ry * bh // GRID_ROWS, (ry + 1) * bh // GRID_ROWS
+            hi = lum_tot = n = 0
+            for by in range(y0, y1):
+                for bx in range(x0, x1):
+                    off = o + (by * bw + bx) * step + cbase
+                    if off + 8 > len(payload):
+                        continue
+                    for e in (off, off + 2):
+                        v = payload[e] | (payload[e + 1] << 8)
+                        r, g, b = dec565(v)
+                        # A cell mixes brocade and leather, so the MEAN
+                        # saturation of both washes out to "cloth". What
+                        # separates them is the proportion of colourful
+                        # blocks, not the average.
+                        if sl[v] > threshold:
+                            hi += 1
+                        lum_tot += 0.299 * r + 0.587 * g + 0.114 * b
+                        n += 1
+            if n:
+                cells[cell_name(cx, ry)] = (hi / n, lum_tot / n)
+    return cells
+
+
+def write_region_map(path, persona, texture, cells, threshold=25):
+    import json
+    # A cell is a fitting when a real share of it is colourful.
+    cloth = sorted(k for k, (f, _) in cells.items() if f <= 0.25)
+    fittings = sorted(k for k, (f, _) in cells.items() if f > 0.25)
+    doc = {}
+    if os.path.isfile(path):
+        doc = json.load(open(path, encoding="utf-8"))
+    entry = doc.setdefault(persona, {})
+    entry["note"] = ("Cells are from the --grid overlay. 'cloth' and 'fittings' "
+                     "were derived from mean saturation; rename and split them "
+                     "into real parts (tunic, belt, boots) as you identify them.")
+    parts = entry.setdefault("parts", {})
+    parts.setdefault(os.path.basename(texture), {})
+    parts[os.path.basename(texture)] = {"cloth": cloth, "fittings": fittings}
+    entry["measured"] = {k: {"colourful": round(f, 3), "brightness": round(l, 1)}
+                         for k, (f, l) in sorted(cells.items())}
+    json.dump(doc, open(path, "w", encoding="utf-8"), indent=2)
+    return len(cloth), len(fittings)
+
+
+def load_part(path, persona, part):
+    """Cells for one named part, searched across that persona's textures."""
+    import json
+    doc = json.load(open(path, encoding="utf-8"))
+    if persona not in doc:
+        sys.exit("no persona %r in %s (have: %s)" % (persona, path, ", ".join(sorted(doc))))
+    found = []
+    for tex, parts in doc[persona].get("parts", {}).items():
+        if part in parts:
+            found += parts[part]
+    if not found:
+        names = set()
+        for parts in doc[persona].get("parts", {}).values():
+            names.update(parts)
+        sys.exit("no part %r for %s (have: %s)" % (part, persona, ", ".join(sorted(names))))
+    return ",".join(sorted(set(found)))
+
+
 # ------------------------------------------------------------------ load ----
 def load(raw, name):
     """Accept either an Anvil .TextureMap or a plain .dds.
@@ -478,6 +600,16 @@ def main():
     ap.add_argument("--max-saturation", type=int, default=None, metavar="N",
                     help="only recolour blocks duller than N (0-255). Keeps leather, "
                          "wood and metal while recolouring near-grey cloth. Try 40.")
+    ap.add_argument("--only", default="",
+                    help="recolour ONLY these cells or rects - the inverse of --keep")
+    ap.add_argument("--regions", help="JSON file of named outfit parts")
+    ap.add_argument("--persona", help="which persona inside the regions file")
+    ap.add_argument("--part", help="recolour only this named part from the regions file")
+    ap.add_argument("--auto-map", action="store_true",
+                    help="analyse the atlas and write a starter region map to --regions")
+    ap.add_argument("--mask-coherence", type=int, default=5, metavar="N",
+                    help="of the 3x3 around a block, how many must also be colourful "
+                         "for it to be held back (0-9, default 5). Kills speckle.")
     ap.add_argument("--levels", help="force a tonal range as black:white, e.g. 0.00:0.58. Use the SAME value on every texture of one outfit so the halves match.")
     ap.add_argument("--no-autolevel", action="store_true",
                     help="use the scheme fixed tonal range instead of measuring the texture")
@@ -519,6 +651,23 @@ def main():
             print("  backup -> %s" % a.backup)
 
     keep = parse_keep(a.keep)
+    only = parse_keep(a.only)
+
+    if a.auto_map:
+        if not (a.regions and a.persona):
+            sys.exit("--auto-map needs --regions and --persona")
+        thr = a.max_saturation if a.max_saturation else 25
+        nc, nf = write_region_map(a.regions, a.persona, a.texture,
+                                  analyse_cells(payload, kind, w, h, mips, thr), thr)
+        print("  region map -> %s   %d cloth cells, %d fitting cells"
+              % (a.regions, nc, nf))
+        return
+    if a.part:
+        if not (a.regions and a.persona):
+            sys.exit("--part needs --regions and --persona")
+        cells = load_part(a.regions, a.persona, a.part)
+        only = parse_keep(cells)
+        print("  part '%s' -> %d cells" % (a.part, len(only)))
     if a.grid:
         write_grid(a.grid, payload, w, h, kind, mips, a.preview_mip, keep)
         print("  grid -> %s" % a.grid)
@@ -538,7 +687,8 @@ def main():
         print("  auto-levels: black %.2f  white %.2f (measured, pass --levels %.2f:%.2f "
               "to match other textures)" % (levels + levels))
     lut = build_lut(a.scheme, max(0.0, min(1.0, a.strength)), levels)
-    new, st = recolour(payload, kind, lut, w, h, mips, keep, a.max_saturation)
+    new, st = recolour(payload, kind, lut, w, h, mips, keep, a.max_saturation,
+                       a.mask_coherence, only)
     print("  scheme '%s' - %s" % (a.scheme, SCHEMES[a.scheme]["desc"]))
     print("  %d blocks: %d recoloured, %d kept original"
           % (st["blocks"], st["changed"], st["kept"]))

@@ -180,6 +180,10 @@ python tools/recolour_texture.py --texture "<path>\1_-_BarberUp_DiffuseMap.Textu
 | `--strength` | `0.0`–`1.0`, blend towards the scheme |
 | `--grid` | Render a labelled `A1..H8` overlay of the atlas |
 | `--keep` | Hold cells (`G2,H2`) or rects (`x0:y0:x1:y1`) at original colours |
+| `--only` | Recolour **only** those cells — the inverse of `--keep` |
+| `--part` | Recolour one named part from a region map |
+| `--auto-map` | Analyse the atlas and write a starter region map |
+| `--mask-coherence` | How much of the 3×3 around a block must agree before it is held back |
 | `--max-saturation` | Only recolour blocks duller than N, so leather, wood and metal keep their own colour |
 | `--levels` | Force one tonal range across every texture of an outfit so the halves match |
 | `--dry-run` | Preview only, write nothing |
@@ -194,14 +198,37 @@ while leather, wood and metal are strongly coloured, so a single threshold
 (around `25`) recolours the garment and leaves its fittings alone — no region
 picking, and it transfers to any persona.
 
+#### Region maps — colouring parts individually
+
+Saturation alone cannot tell a belt from a boot. A **region map** names parts of
+an outfit so they can be coloured separately, and remembers them between
+sessions:
+
+```
+python tools/recolour_texture.py --texture "<tex>" --regions tools/persona-regions.json     --persona Barber --auto-map
+python tools/recolour_texture.py --texture "<tex>" --regions tools/persona-regions.json     --persona Barber --part fittings --scheme crimson_black
+```
+
+`--auto-map` classifies every grid cell by the **fraction** of blocks in it that
+are colourful — not the mean, which averages a mixed cell back down to "cloth"
+and was the first thing that went wrong here. It writes `cloth` and `fittings`
+plus a `measured` table of per-cell colourfulness and brightness. Rename and
+split those into real parts (`tunic`, `belt`, `boots`) as you identify them,
+then colour each with its own scheme.
+
+`tools/persona-regions.json` ships with the Barber already mapped.
+
 To do a whole character at once, use the wrapper — it finds every diffuse
 texture the persona owns, measures the tonal range **once** and forces it on all
 of them, so the halves match instead of drifting apart:
 
 ```
-powershell -File toolsecolour-persona.ps1 -Persona Barber -Scheme gold_black
-powershell -File toolsecolour-persona.ps1 -Persona Barber -Status
-powershell -File toolsecolour-persona.ps1 -Persona Barber -Restore
+powershell -File tools
+ecolour-persona.ps1 -Persona Barber -Scheme gold_black
+powershell -File tools
+ecolour-persona.ps1 -Persona Barber -Status
+powershell -File tools
+ecolour-persona.ps1 -Persona Barber -Restore
 ```
 
 It reports which of the persona's resources still need unpacking in AnvilToolkit.
