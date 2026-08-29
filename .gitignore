@@ -81,3 +81,6 @@ tools/graphics-pending.json
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# Real-ESRGAN ONNX weights - 33 MB, fetched separately, not ours to redistribute
+tools/texture-upscale/*.onnx

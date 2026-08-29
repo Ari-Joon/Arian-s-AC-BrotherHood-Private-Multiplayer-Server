@@ -112,6 +112,8 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/cxb_tool.py` | Parse the `gamesettings` `.cxb` container |
 | `tools/glyph-swap.ps1` | Switch the controller diagram between Xbox and PlayStation |
 | `tools/acb-graphics.ps1` | Read and raise the multiplayer graphics settings |
+| `tools/texture-upscale/` | AI-upscale textures 2x: BC codec, header rewrite, batch |
+| `tools/forge-extract/` | Extract a `.forge` into `.data` containers, no GUI |
 | `tools/recolour_texture.py` | Recolour a persona or any BC1/BC2 texture, reversibly |
 | `tools/recolour-persona.ps1` | Recolour a whole persona at once, with matching tone |
 | `tools/bot_vm.py` | Behaviour VM for bot players — tiers, patrols, pursuit |
@@ -449,6 +451,84 @@ block by 61 bytes. See [re/FINDINGS.md](re/FINDINGS.md) for the full layout and
 the two bugs worth not repeating.
 
 ---
+
+## AI texture upscaling
+
+Every diffuse texture in the multiplayer game is upscaled 2x through
+Real-ESRGAN and repacked — **69 character textures and 770 environment textures
+across twelve maps**. Offline, so it costs nothing at runtime, and permanent.
+
+```
+python tools/texture-upscale/upscale.py --in X.TextureMap --out Y.TextureMap \
+       --scale 2 --model <path>/RealESRGAN_x4plus.fp16.onnx
+python tools/texture-upscale/batch.py --dry-run
+```
+
+Needs `numpy`, `pillow` and `onnxruntime`. The ONNX weights are fetched
+separately and are not in this repo.
+
+**The codec is the part worth trusting.** `bc.py` decodes and encodes BC1, BC2
+and BC3 in numpy, and its decoder is **byte-exact against Pillow's** on all four
+format codes in the roster. That cross-check found two real bugs: BC2 and BC3
+colour blocks always use the 4-colour interpretation regardless of endpoint
+order, and repairing a degenerate block by nudging an endpoint silently flipped
+punch-through blocks to opaque. Round-trip re-encode is 39—53 dB.
+
+**The header rewrite is four fields and three trailer fields**, and nothing else —
+width, height, mip count, payload size, then width, height and mip count in the
+trailer. There is no per-mip offset table. `texmap.py` refuses to load anything
+whose declared payload disagrees with its geometry, which is what caught the
+cubemap and the uncompressed format.
+
+Three things that will bite anyone extending this:
+
+- **Mip count changes when you double.** 1024 has 11 levels, 2048 has 12, so the
+  payload grows by *more* than 4x. Assuming 4x yields a file a third short that
+  otherwise looks correct.
+- **There is a cubemap.** `id20_cubemap_Map` is 6 faces, flagged by the texture
+  type at header offset 26 (1 = flat, 2 = cube). A tool assuming one face writes
+  a sixth of the data.
+- **Format 0 is not block-compressed.** `AC2MP_Radar_2ndTarget_01` declares 8 mips
+  of 128x128 at 87,380 bytes, which is exactly the *uncompressed* RGBA chain at 4
+  bytes per texel. Read as BC nothing lines up.
+
+**2x is the ceiling, and it is an address-space limit rather than a taste one.**
+`ACBMP.exe` is a 32-bit `LARGE_ADDRESS_AWARE` PE, so 4 GB. Measured peak working
+set in a live match:
+
+| assets | peak |
+|---|---|
+| stock | 698 MB |
+| upscaled characters only | 803 MB |
+| everything upscaled | **904 MB** |
+
+Each step adds about what the extra texture data should cost, which is what says
+the larger mips are genuinely resident rather than discarded at load. At 4x the
+textures alone would be over 3 GB and the process would not fit.
+
+**Resident is not the same as sampled.** Nobody has yet held a camera still
+across a forge swap and compared frames, so "the data is loaded" is proven and
+"every pixel is sampled at the higher resolution" is not.
+
+### Extracting a forge without the GUI
+
+`anvil-unpack` handles `.data` containers and `anvil-repack` writes a `.forge`
+back, but forge → `.data` was GUI-only, which blocked any automated pass over the
+map archives. `ForgeFile.Deserialize` mirrors the `Serialize` the repack tool
+already calls:
+
+```
+dotnet run --project tools/forge-extract -- "<game>\multi\DataPC_AC2MP_Siena.forge"
+```
+
+It **appends the forge's own name to the folder it is given**, so the tool passes
+the parent. Handing it the full output path yields `Extracted\<name>\<name>\`, and
+a caller checking one level up sees an empty directory and reports a successful
+extraction as a failure.
+
+Of Rome's 1756 containers only 68 are `DiffuseMap`; 1141 are `DataBlock_*` script
+and mission data with no textures at all, so `anvil-unpack --filter DiffuseMap`
+cuts the work by 25x.
 
 ## Bots
 
