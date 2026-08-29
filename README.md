@@ -4,7 +4,9 @@ A private matchmaking server for **Assassin's Creed: Brotherhood** multiplayer, 
 
 This is a fork of [michal-kapala/acb-rdv](https://github.com/michal-kapala/acb-rdv), which does the hard part: reimplementing Ubisoft's Quazal **Rendez-Vous** backend.
 
-> **You need your own legal copy of the game.** No game assets are distributed here.
+> **You need your own legal copy of the game.** No game *files* are redistributed
+> here — every tool reads and writes your own installation. The screenshots below
+> are illustrative only.
 
 ---
 
@@ -16,6 +18,11 @@ Brotherhood's multiplayer splits in two:
 |---|---|
 | Login, lobbies, matchmaking, friends | **This server** (Quazal Rendez-Vous) |
 | The match itself | **Peer-to-peer between players** |
+
+![A match in Rome with every texture upscaled](docs/images/gameplay-rome.png)
+
+*The tutorial session in Rome, running on rebuilt forges: all 69 character
+textures and all 770 environment textures upscaled 2x through Real-ESRGAN.*
 
 The server introduces players to each other and then steps out. It never sees the gameplay. That means you do not need a powerful host — but it also means players must be able to reach each other directly (see *Networking*).
 
@@ -141,13 +148,29 @@ powershell -File tools\acb-launcher.ps1 -AmbientOcclusion on -FullMips on -Shado
 
 | control | switch | measured |
 |---|---|---|
-| Shadows | `/shadows:` | unmeasured |
-| Post-processing | `/postfx:` | unmeasured |
+| Shadows | `/shadows:` | **unmeasured** — see below |
+| Post-processing | `/postfx:` | **unmeasured** — see below |
 | Anti-aliasing | `/msaa:` | — |
 | Full mip chains | `/skipmips:off` + character + environment | +108.6 MB |
 | Atlas mipmaps | `/generateatlasmipmaps:on` | +111.5 MB |
 | Ambient occlusion | `/computeao:on /skipao:off` | -110.5 MB |
 | Draw distance | `/fardist:` | -60.9 MB at 10000 |
+
+`/shadows` and `/postfx` were measured for and the attempt **failed**, which is
+recorded rather than dropped. Both arms ran correctly and passed the right
+switches — verified by reading the live process command line, not the launcher's
+own label — but both peaked at 357 MB. A menu sits at 350—400 MB and the loaded
+world runs 700—900, so neither arm ever left the menu, and shadows and
+post-processing do not exist in a menu.
+
+An earlier version of that test reported an 84% pixel difference between the two
+arms and looked like a clean positive. It was the menu's animated background.
+The capture now triggers on the world being resident and marks itself void if it
+never gets there.
+
+Completing it needs a human to drive the client into the tutorial while the
+switches are set; the game does not enter it unattended. Until then these two
+ship in `-Quality High` on the assumption that they work.
 
 The last four have **no in-game equivalent at all** — they are what the launcher
 genuinely adds over the options menu. The figures are peak working set against an
@@ -466,6 +489,18 @@ python tools/texture-upscale/batch.py --dry-run
 
 Needs `numpy`, `pillow` and `onnxruntime`. The ONNX weights are fetched
 separately and are not in this repo.
+
+![Stock, Lanczos and Real-ESRGAN on the same patch](docs/images/upscaler-comparison.png)
+
+*The same patch of one persona texture at the same on-screen size: the stock
+1024 map magnified as the game magnifies it, plain Lanczos, and Real-ESRGAN run
+at 4x then downsampled to 2x. The AI pass puts back weave and stitching rather
+than smoothing the interpolation.*
+
+![Close-range stonework and cobbles](docs/images/texture-detail.png)
+
+*In-game stonework and cobbles at 3x nearest-neighbour, so what you are looking
+at is texels rather than a smoothing filter.*
 
 **The codec is the part worth trusting.** `bc.py` decodes and encodes BC1, BC2
 and BC3 in numpy, and its decoder is **byte-exact against Pillow's** on all four
