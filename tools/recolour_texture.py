@@ -66,7 +66,7 @@ OFF_FID, OFF_W, OFF_H, OFF_FMT, OFF_SRGB, OFF_MIPS = 2, 10, 14, 22, 30, 34
 OFF_PAYLOAD_SIZE = 86          # u32, matches len(file) - 151 on both archives
 FMT_BC1, FMT_BC2 = 2, 4
 BYTES_PER_BLOCK = {FMT_BC1: 8, FMT_BC2: 16}
-FMT_NAME = {FMT_BC1: "BC1/DXT1", FMT_BC2: "BC2/DXT3"}
+FMT_NAME = {2: "BC1/DXT1", 3: "BC1/DXT1a", 4: "BC2/DXT3", 5: "BC3/DXT5"}
 
 # Block kinds, by how the colour endpoints sit inside a block:
 #   (bytes per block, offset of the colour half, does endpoint order pick mode)
@@ -75,7 +75,15 @@ KIND = {
     "bc2": (16, 8, False),     # explicit alpha, colour half always 4-colour
     "bc3": (16, 8, False),     # interpolated alpha, colour half always 4-colour
 }
-KIND_FROM_FMT = {FMT_BC1: "bc1", FMT_BC2: "bc2"}
+# Format codes seen across the multiplayer roster, with the block size each
+# implies from its declared payload:
+#   2, 3 -> 8 bytes/block   BC1 family (3 is a BC1 variant; treating it as BC1
+#                           is safe either way, because endpoint-order mode is
+#                           preserved rather than assumed)
+#   4, 5 -> 16 bytes/block  BC2 and BC3; both keep colour in the second half
+#                           and always use the 4-colour interpretation, and
+#                           their alpha halves are never touched.
+KIND_FROM_FMT = {2: "bc1", 3: "bc1", 4: "bc2", 5: "bc3"}
 KIND_FROM_FOURCC = {b"DXT1": "bc1", b"DXT3": "bc2", b"DXT5": "bc3"}
 
 
@@ -632,13 +640,16 @@ def load(raw, name):
     fmt, mips = (struct.unpack_from("<I", raw, x)[0] for x in (OFF_FMT, OFF_MIPS))
     kind = KIND_FROM_FMT.get(fmt)
     if not kind:
-        sys.exit("TextureMap: unsupported format code %d (expected 2=BC1 or 4=BC2)" % fmt)
+        # Exit 3 rather than raising, so a batch can skip one odd texture
+        # instead of losing the whole run.
+        print("  SKIPPED: unsupported format code %d in %s" % (fmt, os.path.basename(name)))
+        sys.exit(3)
     size = struct.unpack_from("<I", raw, OFF_PAYLOAD_SIZE)[0]
     if not 0 < size <= len(raw) - PAYLOAD_OFF:
         sys.exit("TextureMap: bad payload size %d in a %d byte file" % (size, len(raw)))
     end = PAYLOAD_OFF + size
     return (raw[:PAYLOAD_OFF], raw[PAYLOAD_OFF:end], raw[end:], w, h, kind, max(1, mips),
-            "TextureMap %s  File ID 0x%08X" % (FMT_NAME[fmt], fid))
+            "TextureMap %s  File ID 0x%08X" % (FMT_NAME.get(fmt, "fmt%d" % fmt), fid))
 
 
 # ------------------------------------------------------------------ main ----

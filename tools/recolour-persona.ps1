@@ -195,7 +195,16 @@ foreach ($grp in $groups) {
         if ($groupLevels) { $argv += @('--levels', $groupLevels) }
         if ($Keep)   { $argv += @('--keep', $Keep) }
         if ($DryRun) { $argv += '--dry-run' }
-        & python $engine @argv
+        # One odd texture must not abort the roster. With ErrorActionPreference
+        # Stop, any stderr from a native command is a terminating error, so
+        # relax it just around the call and report per-texture instead.
+        $prev = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        & python $engine @argv 2>&1 | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ("   skipped (exit " + $LASTEXITCODE + ")") -ForegroundColor DarkYellow
+        }
+        $ErrorActionPreference = $prev
     }
 }
 
