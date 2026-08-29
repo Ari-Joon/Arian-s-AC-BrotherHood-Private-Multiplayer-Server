@@ -171,9 +171,26 @@ Two earlier attempts failed and are worth recording:
   would not bind and rendered grey.
 
 **Scope:** `Binding_360` drives the CONTROLLER LAYOUT diagram only. Footer
-prompt icons come from a different atlas and remain Xbox. `Tips_Hud_Extend_*`
-and `Tips_CrossAir_*` exist as 360/PS3 pairs and should respond to the same
-recipe.
+prompt icons come from a different atlas and remain Xbox.
+
+**`Binding_PS3` is the only genuine PlayStation artwork in the PC build.** All
+47 forge archives were swept for `*_PS3*` resources and every candidate byte-
+compared against its 360 counterpart:
+
+| pair | differing bytes | verdict |
+|---|---|---|
+| `Binding_360` / `Binding_PS3` | 64,137 | genuinely different art |
+| `Tips_Hud_Extend_360` / `_PS3` | 28, all within first 198 B | identical payload |
+| `Tips_CrossAir_360` / `_PS3` | 26, all within first 196 B | identical payload |
+
+The two `Tips_*` pairs are the same image carrying different resource IDs --
+console build-pipeline duplicates, not alternate artwork. Swapping them changes
+nothing on screen. Everything else matching "PS3" across the archives is
+`PC_X360_PS3`, i.e. shared multi-platform art (walls, water, horses).
+
+Changing the footer prompt icons would therefore mean *authoring* PlayStation
+glyphs and compositing them into whichever atlas draws them -- there is no
+shipped source to copy.
 
 Context: a DualSense reaches the game through DS4Windows + ViGEm as a virtual
 Xbox 360 pad, so the game legitimately believes it is an Xbox controller and
