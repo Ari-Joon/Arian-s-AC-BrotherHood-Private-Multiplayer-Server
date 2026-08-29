@@ -214,3 +214,63 @@ than engineering.
 | `tools/bot-autoaccept.ps1` | **Unverified** — never observed accepting an invite |
 | `tools/bot_vm.py` | **Simulation only** — never driven a real client |
 | `tools/join-match.macro` | **Uncalibrated** starting point |
+
+---
+
+## Aside: the `.cxb` game settings are now readable
+
+Recorded here because it was found during bot work and is easy to lose.
+
+`multi/Backups/gamesettings_test.data` uses the **same container format** as the
+texture archives, so `tools/anvil-inflate` opens it. 28 chunks; the first
+inflates to **93,684 bytes** — exactly the figure earlier notes recorded as
+unreachable — and it is **plain XML**:
+
+```xml
+<AbilityManagerMulti memberName="AbilityManagerMulti">
+  <m_AbilityReferenceList Array_Size="75">
+    <AbilityDisguise><CooldownDuration value="60.0"/></AbilityDisguise>
+    <AbilitySpeedBoost><CooldownDuration value="60.0"/><SpeedFactor value="1.2"/></AbilitySpeedBoost>
+```
+
+24 ability classes, 75 ability entries, with tunable `CooldownDuration` (48),
+`Duration` (37), `Radius` (20), `SpeedFactor` (10), `Range` (8).
+
+**This contradicts an earlier claim in the README** that ability tuning is
+"locked behind the `.cxb` encoding". It is not, now that the container codec is
+solved.
+
+### The challenge gate is visible
+
+Unlock conditions come in two shapes, and converting one to the other is a
+mechanical edit:
+
+```xml
+CHALLENGE   classID="1475552278"  <UnlockConditionChallenge>
+                                    <Handle propertyName="ChallengeRewardRef" objID="..."/>
+                                    <Level value="2"/>
+LEVEL       classID="1688405200"  <UnlockConditionLevel>
+                                    <Level value="2"/>
+```
+
+Counts: **51 level-gated, 24 challenge-gated.** The 24 are the abilities locked
+behind challenges. Every ability has `InitiallyHidden="false"`, so nothing is
+hidden by flag — the gate is entirely the unlock condition.
+
+### Two things not yet established
+
+1. **Whether this file is live.** It exists only under `multi/Backups/`, and no
+   forge in `multi/` contains a `gamesettings` or `abilitymanager` string. So
+   this may be a stray copy rather than what the game reads. Until the live one
+   is located, editing it changes nothing.
+2. **Whether it can be written back.** The chunks inflate, but
+   `anvil-unpack` FAILED on this container ("no output"), so the write path is
+   unproven. Reading and writing are different problems.
+
+### New abilities?
+
+Partly. The 24 classes are implemented in `ACBMP.exe`, so a genuinely new
+*mechanic* cannot be added by editing XML. But new **variants** of existing
+classes look feasible — the list is an array of 75 references, and each entry
+is a class plus parameters. A longer-lasting Smoke Bomb or a faster Speed Boost
+is a parameter change, not new code.
