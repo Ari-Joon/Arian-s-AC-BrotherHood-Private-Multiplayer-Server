@@ -116,6 +116,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/bot_vm.py` | Behaviour VM for bot players — tiers, patrols, pursuit |
 | `tools/anvil-unpack/` | Unpack `.data` containers in batch, no GUI |
 | `tools/anvil-inflate/` | Inflate a container chunk — archives, `OPTIONS`, `.SAV` |
+| `tools/anvil-repack/` | Repack `.data` containers and the `.forge`, no GUI |
 
 ### Display modes
 
@@ -263,6 +264,22 @@ dotnet run --project tools/anvil-unpack -- --all "<game>\multi\Extracted\DataPC.
 algorithm and version carried in each block header — but rather than
 reimplement it (an attempt that failed on the details), this calls
 `DataFile.Deserialize` directly and gets exactly what the GUI produces.
+
+`tools/anvil-repack` is the write half:
+
+```
+dotnet run --project tools/anvil-repack -- --data-all "<...>\DataPC.forge" --only-modified
+dotnet run --project tools/anvil-repack -- --forge  "<...>\multi\DataPC.forge"
+```
+
+**Inner `.data` first, then the `.forge`** — the forge gathers the containers as
+they are on disk, so doing it first silently repacks the originals.
+
+Both paths write to a temp file and swap only on success, and both verify the
+file actually changed. A repack against a forge held open by the game or
+AnvilToolkit fails *silently* — no error, no log line — so "no exception" is not
+evidence of success and is not treated as such. The forge keeps the previous
+version beside it as `.bak`; delete it once you are satisfied.
 
 **Texture format.** A `.TextureMap` is a 90-byte header, then raw BC blocks for
 every mip level largest-first, then a 61-byte trailer. Because that trailer is
