@@ -37,7 +37,12 @@ namespace QuazalWV
 
         public void ToBuffer(Stream s)
         {
-            throw new NotImplementedException();
+            // Mirrors FromStream exactly - field order on the wire is
+            // SessionKey, SenderPid, Message, CreationTime.
+            SessionKey.ToBuffer(s);
+            Helper.WriteU32(s, SenderPid);
+            Helper.WriteString(s, Message);
+            CreationTime.ToBuffer(s);
         }
     }
 }

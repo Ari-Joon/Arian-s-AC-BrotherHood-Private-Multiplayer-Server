@@ -269,7 +269,34 @@ namespace QuazalWV
                     break;
                 case 14:
                     var reqGetInvRecv = (RMCPacketRequestGameSessionService_GetInvitationsReceived)rmc.request;
-                    reply = new RMCPacketResponseGameSessionService_GetInvitationsReceived();
+                    var respGetInvRecv = new RMCPacketResponseGameSessionService_GetInvitationsReceived();
+                    // Invitations stored for this player while they were offline.
+                    // Note these are also pushed as notifications at logon by
+                    // FriendsService.SendLogonGameInvites, which deletes them once
+                    // delivered - so this list is normally empty for a client that
+                    // has already completed logon.
+                    foreach (var storedInvite in DbHelper.GetGameInvites(client.User.Pid))
+                    {
+                        if (storedInvite.Invitation == null || storedInvite.Invitation.Key == null)
+                            continue;
+                        if (reqGetInvRecv.GameSessionTypeId != 0 &&
+                            storedInvite.Invitation.Key.TypeId != reqGetInvRecv.GameSessionTypeId)
+                            continue;
+                        respGetInvRecv.Invitations.Add(new GameSessionInvitationReceived
+                        {
+                            SessionKey = storedInvite.Invitation.Key,
+                            SenderPid = storedInvite.Inviter,
+                            Message = storedInvite.Invitation.Message,
+                            // game_invites carries no timestamp column, so the
+                            // creation time is approximated at read time.
+                            CreationTime = new QDateTime(DateTime.Now)
+                        });
+                        if (reqGetInvRecv.ResultRange.Size > 0 &&
+                            respGetInvRecv.Invitations.Count >= reqGetInvRecv.ResultRange.Size)
+                            break;
+                    }
+                    Log.WriteRmcLine(1, $"GetInvitationsReceived: returning {respGetInvRecv.Invitations.Count} invite(s)", protocol, LogSource.RMC, Color.Blue, client);
+                    reply = respGetInvRecv;
                     RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);
                     break;
                 case 17:
