@@ -71,3 +71,7 @@ DS4Windows/
 
 # Personal machine config backups (contain hardware IDs)
 re/ini-backup/
+
+# .NET build output
+bin/
+obj/
