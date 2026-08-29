@@ -59,6 +59,13 @@ param(
     [Parameter(ParameterSetName = 'Run')]
     [int]$Duration = 0,
 
+    # Bots are never looked at, so render as little as possible. All clients on
+    # one Windows account share Saved Games\ACBrotherhood.ini, so per-client
+    # graphics can ONLY come from the command line - changing the INI would
+    # change the human player's settings too.
+    [Parameter(ParameterSetName = 'Run')]
+    [switch]$FullQuality,
+
     [Parameter(ParameterSetName = 'Run')]
     [switch]$DryRun,
 
@@ -214,8 +221,32 @@ foreach ($a in $accounts) {
     # every bot on a dry run, where nothing is added to $procs.
     $args = @("/onlineUser:$($a.Name)", "/onlinePassword:$($a.Password)", "/userindex:$index")
     $index++
+    if (-not $FullQuality) {
+        # Values are from the game's own argument table: off|on|force|default|
+        # normal|full, with msaa taking none|2x|4x|6x|8x instead.
+        # MEASURED AND IT DOES NOT HELP AT A MENU. A low-spec bot sat at 391 MB
+        # against 374-380 MB for full-quality clients - no saving, because a
+        # menu renders almost nothing either way. These may pay off inside a
+        # match, where there is a world to draw, but that is UNTESTED and should
+        # not be claimed. Kept because it costs nothing and is the only
+        # per-client route, since all clients share one INI.
+        #
+        # The measure that does work is minimising the window: a minimised DX9
+        # window stops presenting frames, so the GPU stops drawing it.
+        $args += @(
+            "/shadows:off",       # shadow maps
+            "/postfx:off",        # post-processing chain
+            "/msaa:none",         # anti-aliasing
+            "/skipmips:force",    # load only small mips: the big texture saving
+            "/skipmipscharacter:force",
+            "/skipmipsenvironment:force",
+            "/skipao:on",         # no ambient occlusion computation
+            "/nofogofwar"
+        )
+    }
     Write-Host ""
-    Write-Host ("  launching {0}  {1}" -f $a.Name, ($args -join ' ')) -ForegroundColor Cyan
+    Write-Host ("  launching {0}{1}" -f $a.Name, $(if ($FullQuality) { "  (full quality)" } else { "  (low spec)" })) -ForegroundColor Cyan
+    Write-Verbose ($args -join ' ')
     if ($DryRun) { continue }
     $p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $GamePath -PassThru
     $procs += $p
