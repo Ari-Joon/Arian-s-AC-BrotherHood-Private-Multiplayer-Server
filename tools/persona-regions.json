@@ -71,264 +71,334 @@
           "G8",
           "H6"
         ]
+      },
+      "1_-_BarberBottom_DiffuseMap.TextureMap": {
+        "cloth": [
+          "A1",
+          "A2",
+          "A3",
+          "A4",
+          "A5",
+          "A6",
+          "A7",
+          "A8",
+          "B1",
+          "B2",
+          "B3",
+          "B4",
+          "B5",
+          "B6",
+          "B7",
+          "B8",
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "C6",
+          "C7",
+          "C8",
+          "D1",
+          "D2",
+          "D3",
+          "D4",
+          "D5",
+          "D6",
+          "D7",
+          "D8",
+          "E1",
+          "E2",
+          "E3",
+          "E4",
+          "E5",
+          "E6",
+          "E7",
+          "E8",
+          "F1",
+          "F2",
+          "F3",
+          "F5",
+          "F6",
+          "F8",
+          "G1",
+          "G2",
+          "G3",
+          "G4",
+          "G5",
+          "G6",
+          "G7",
+          "G8",
+          "H1",
+          "H2",
+          "H3",
+          "H4",
+          "H5",
+          "H6",
+          "H7",
+          "H8"
+        ],
+        "fittings": [
+          "F4",
+          "F7"
+        ]
       }
     },
     "measured": {
       "A1": {
-        "colourful": 0.0,
-        "brightness": 54.4
-      },
-      "A2": {
-        "colourful": 0.0,
-        "brightness": 56.8
-      },
-      "A3": {
-        "colourful": 0.116,
-        "brightness": 54.2
-      },
-      "A4": {
-        "colourful": 0.131,
-        "brightness": 55.5
-      },
-      "A5": {
-        "colourful": 0.004,
-        "brightness": 66.1
-      },
-      "A6": {
-        "colourful": 0.027,
-        "brightness": 30.6
-      },
-      "A7": {
-        "colourful": 0.033,
+        "colourful": 0.029,
         "brightness": 28.4
       },
+      "A2": {
+        "colourful": 0.027,
+        "brightness": 32.8
+      },
+      "A3": {
+        "colourful": 0.01,
+        "brightness": 84.3
+      },
+      "A4": {
+        "colourful": 0.004,
+        "brightness": 172.3
+      },
+      "A5": {
+        "colourful": 0.137,
+        "brightness": 170.6
+      },
+      "A6": {
+        "colourful": 0.042,
+        "brightness": 136.7
+      },
+      "A7": {
+        "colourful": 0.024,
+        "brightness": 101.8
+      },
       "A8": {
-        "colourful": 0.005,
-        "brightness": 17.8
+        "colourful": 0.085,
+        "brightness": 39.7
       },
       "B1": {
         "colourful": 0.0,
-        "brightness": 58.9
+        "brightness": 29.1
       },
       "B2": {
         "colourful": 0.0,
-        "brightness": 67.4
+        "brightness": 25.0
       },
       "B3": {
-        "colourful": 0.0,
-        "brightness": 63.2
+        "colourful": 0.001,
+        "brightness": 89.3
       },
       "B4": {
-        "colourful": 0.0,
-        "brightness": 49.4
+        "colourful": 0.003,
+        "brightness": 171.9
       },
       "B5": {
-        "colourful": 0.068,
-        "brightness": 55.4
+        "colourful": 0.025,
+        "brightness": 168.8
       },
       "B6": {
-        "colourful": 0.135,
-        "brightness": 43.8
+        "colourful": 0.005,
+        "brightness": 138.4
       },
       "B7": {
         "colourful": 0.003,
-        "brightness": 35.7
+        "brightness": 128.1
       },
       "B8": {
-        "colourful": 0.009,
-        "brightness": 69.7
+        "colourful": 0.019,
+        "brightness": 33.0
       },
       "C1": {
         "colourful": 0.0,
-        "brightness": 46.5
+        "brightness": 18.0
       },
       "C2": {
         "colourful": 0.0,
-        "brightness": 59.9
+        "brightness": 17.1
       },
       "C3": {
         "colourful": 0.0,
-        "brightness": 67.8
+        "brightness": 21.3
       },
       "C4": {
-        "colourful": 0.0,
-        "brightness": 66.5
+        "colourful": 0.01,
+        "brightness": 120.9
       },
       "C5": {
-        "colourful": 0.002,
-        "brightness": 64.3
+        "colourful": 0.018,
+        "brightness": 140.0
       },
       "C6": {
-        "colourful": 0.0,
-        "brightness": 57.9
+        "colourful": 0.007,
+        "brightness": 172.7
       },
       "C7": {
-        "colourful": 0.0,
-        "brightness": 54.5
+        "colourful": 0.006,
+        "brightness": 172.6
       },
       "C8": {
-        "colourful": 0.005,
-        "brightness": 110.4
+        "colourful": 0.045,
+        "brightness": 68.1
       },
       "D1": {
         "colourful": 0.0,
-        "brightness": 33.9
+        "brightness": 2.8
       },
       "D2": {
         "colourful": 0.0,
-        "brightness": 43.5
+        "brightness": 45.4
       },
       "D3": {
         "colourful": 0.0,
-        "brightness": 56.3
+        "brightness": 4.0
       },
       "D4": {
         "colourful": 0.0,
-        "brightness": 62.5
+        "brightness": 24.6
       },
       "D5": {
-        "colourful": 0.0,
-        "brightness": 58.2
+        "colourful": 0.004,
+        "brightness": 70.6
       },
       "D6": {
-        "colourful": 0.0,
-        "brightness": 51.7
+        "colourful": 0.006,
+        "brightness": 160.7
       },
       "D7": {
-        "colourful": 0.042,
-        "brightness": 40.4
+        "colourful": 0.01,
+        "brightness": 172.6
       },
       "D8": {
-        "colourful": 0.088,
-        "brightness": 53.5
+        "colourful": 0.048,
+        "brightness": 81.5
       },
       "E1": {
-        "colourful": 0.0,
-        "brightness": 51.3
+        "colourful": 0.022,
+        "brightness": 30.6
       },
       "E2": {
         "colourful": 0.0,
-        "brightness": 64.4
+        "brightness": 34.9
       },
       "E3": {
-        "colourful": 0.0,
-        "brightness": 70.4
+        "colourful": 0.021,
+        "brightness": 20.2
       },
       "E4": {
-        "colourful": 0.0,
-        "brightness": 69.1
+        "colourful": 0.145,
+        "brightness": 49.2
       },
       "E5": {
-        "colourful": 0.0,
-        "brightness": 45.6
+        "colourful": 0.091,
+        "brightness": 36.7
       },
       "E6": {
-        "colourful": 0.0,
-        "brightness": 46.0
+        "colourful": 0.088,
+        "brightness": 87.4
       },
       "E7": {
-        "colourful": 0.118,
-        "brightness": 36.3
+        "colourful": 0.132,
+        "brightness": 144.3
       },
       "E8": {
-        "colourful": 0.18,
-        "brightness": 40.3
+        "colourful": 0.075,
+        "brightness": 61.0
       },
       "F1": {
-        "colourful": 0.0,
-        "brightness": 45.0
+        "colourful": 0.065,
+        "brightness": 42.1
       },
       "F2": {
-        "colourful": 0.0,
-        "brightness": 58.9
+        "colourful": 0.005,
+        "brightness": 15.7
       },
       "F3": {
-        "colourful": 0.0,
-        "brightness": 65.1
+        "colourful": 0.07,
+        "brightness": 30.1
       },
       "F4": {
-        "colourful": 0.0,
-        "brightness": 61.5
+        "colourful": 0.261,
+        "brightness": 41.4
       },
       "F5": {
-        "colourful": 0.041,
-        "brightness": 56.4
+        "colourful": 0.158,
+        "brightness": 40.1
       },
       "F6": {
-        "colourful": 0.262,
-        "brightness": 38.6
+        "colourful": 0.213,
+        "brightness": 43.6
       },
       "F7": {
-        "colourful": 0.187,
-        "brightness": 44.0
+        "colourful": 0.268,
+        "brightness": 78.3
       },
       "F8": {
-        "colourful": 0.323,
-        "brightness": 29.2
+        "colourful": 0.205,
+        "brightness": 36.6
       },
       "G1": {
-        "colourful": 0.008,
-        "brightness": 42.0
+        "colourful": 0.03,
+        "brightness": 39.6
       },
       "G2": {
-        "colourful": 0.003,
-        "brightness": 70.9
+        "colourful": 0.048,
+        "brightness": 34.9
       },
       "G3": {
-        "colourful": 0.019,
-        "brightness": 42.9
+        "colourful": 0.118,
+        "brightness": 27.5
       },
       "G4": {
-        "colourful": 0.035,
-        "brightness": 61.5
+        "colourful": 0.177,
+        "brightness": 37.6
       },
       "G5": {
-        "colourful": 0.072,
-        "brightness": 61.6
+        "colourful": 0.128,
+        "brightness": 39.5
       },
       "G6": {
-        "colourful": 0.055,
-        "brightness": 51.3
+        "colourful": 0.05,
+        "brightness": 43.0
       },
       "G7": {
-        "colourful": 0.316,
-        "brightness": 55.6
+        "colourful": 0.048,
+        "brightness": 83.0
       },
       "G8": {
-        "colourful": 0.405,
-        "brightness": 30.2
+        "colourful": 0.154,
+        "brightness": 68.9
       },
       "H1": {
-        "colourful": 0.021,
-        "brightness": 40.4
+        "colourful": 0.049,
+        "brightness": 40.5
       },
       "H2": {
-        "colourful": 0.003,
-        "brightness": 46.3
+        "colourful": 0.013,
+        "brightness": 38.0
       },
       "H3": {
-        "colourful": 0.174,
-        "brightness": 49.8
+        "colourful": 0.001,
+        "brightness": 35.1
       },
       "H4": {
-        "colourful": 0.249,
-        "brightness": 54.6
+        "colourful": 0.022,
+        "brightness": 33.5
       },
       "H5": {
-        "colourful": 0.166,
-        "brightness": 21.5
+        "colourful": 0.192,
+        "brightness": 32.1
       },
       "H6": {
-        "colourful": 0.421,
-        "brightness": 43.8
+        "colourful": 0.042,
+        "brightness": 60.0
       },
       "H7": {
-        "colourful": 0.249,
-        "brightness": 38.3
+        "colourful": 0.0,
+        "brightness": 67.7
       },
       "H8": {
-        "colourful": 0.237,
-        "brightness": 31.6
+        "colourful": 0.0,
+        "brightness": 97.9
       }
     }
   }
