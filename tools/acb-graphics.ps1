@@ -1,51 +1,64 @@
 <#
   Read and raise the multiplayer graphics settings.
 
-  THE FILE THE MULTIPLAYER GAME ACTUALLY READS
-
-  There are two INIs named ACBrotherhoodMP.ini, in two places, holding
-  different things:
+  THREE INIs EXIST, AND ONLY ONE OF THEM MATTERS
 
       %USERPROFILE%\Saved Games\Assassin's Creed Brotherhood\
-          ACBrotherhood.ini      <- singleplayer [Graphics] + input profiles
-          ACBrotherhoodMP.ini    <- multiplayer KEY BINDINGS only
+          ACBrotherhood.ini      <- [Graphics] + input profiles   *** this one ***
+          ACBrotherhoodMP.ini    <- key bindings only
+      <game>\
+          ACBrotherhoodMP.ini    <- [Graphics] with Options* names, and INERT
 
-      <game>\ACBrotherhoodMP.ini <- multiplayer [Graphics]   *** this one ***
+  The game-directory file was missed entirely until today, and FINDINGS had its
+  Options* key names filed under the Saved Games path. Finding it was real; the
+  first conclusion drawn from it was not. It is not the file multiplayer uses.
 
-  The game-directory file is the multiplayer quality surface, and it uses its
-  own key names - OptionsShadowQuality, not ShadowQuality. re/FINDINGS.md
-  recorded those Options* names from string analysis but assumed they lived in
-  the Saved Games file, so the "quality values are clamped" experiment was run
-  against the singleplayer INI and never touched this one.
+  WHICH FILE, AND WHEN IT IS WRITTEN - both settled by experiment
 
-  WHAT THAT MISSED
+  ACBMP.exe writes Saved Games\ACBrotherhood.ini and does NOT write either
+  MP-named file. Measured twice by different routes: a launch rewrote the Saved
+  Games file and left both ACBrotherhoodMP.ini untouched. So the game-directory
+  file is real, and is not the one that matters. This script targets the file
+  the game actually writes; -File GameMP reaches the other one.
 
-  Singleplayer ceilings, established by that clamp test:
+  The write happens AT STARTUP, not on exit - a watcher caught the file change
+  twice with the process alive, seconds after launch. FINDINGS said write-on-exit
+  all day, which made a clean menu exit look necessary. It is not. Launch, wait,
+  read. Editing the file while the game runs is pointless rather than dangerous:
+  the values have already been read.
 
-      EnvironmentQuality 5   TextureQuality 2   ShadowQuality 4
-      ReflectionQuality  3   CharacterQuality 4
+  CEILINGS - measured, by arming every key at 9 and reading back what the game
+  wrote. Every one clamped to the value it ALREADY held:
 
-  The multiplayer file ships every quality key at 2 - which is the ceiling of
-  the MP options menu (Low/Medium/High = 0/1/2), not necessarily the ceiling of
-  the renderer. Shadows, reflections and characters all have documented range
-  above 2 in the sibling file.
+      TextureQuality 2   EnvironmentQuality 5   ShadowQuality 4
+      ReflectionQuality 3   CharacterQuality 4   MultiSampleType 8   PostFX 1
 
-  -Set Beyond writes those higher values so the question can be settled. The
-  game rewrites this INI ON EXIT, so the test is: set, play, quit, -Verify.
-  Whatever it wrote back is the real ceiling.
+  The config was already at maximum on every axis. There is no INI headroom, and
+  that is a closed question rather than an open one. -Set Max simply restores
+  those values, which is worth doing after the in-game menu has lowered one.
+  -Set Beyond is kept so the experiment reproduces, not because it will find
+  anything.
+
+  VSync=1 and RefreshRate=240 persisted, but were never raised above a valid
+  value, so that shows re-emission and not that the game honours them.
+
+  Scripting note: a bare ACBMP.exe launch exits at once with code 41 and writes
+  nothing. It needs /onlineUser and /onlinePassword to reach the point where it
+  writes its config - without them a run is indistinguishable from "inert keys".
 
   USAGE
     .\acb-graphics.ps1 -Status
-    .\acb-graphics.ps1 -Set Menu      # everything the options menu can reach
-    .\acb-graphics.ps1 -Set Beyond    # + the singleplayer ranges, to be tested
+    .\acb-graphics.ps1 -Set Max       # every key back at its measured ceiling
+    .\acb-graphics.ps1 -Set Beyond    # the closed experiment, reproducible
     .\acb-graphics.ps1 -Verify        # after one launch: what survived?
+    .\acb-graphics.ps1 -Status -File GameMP
     .\acb-graphics.ps1 -Restore
-    .\acb-graphics.ps1 -Set Menu -RefreshRate 144
+    .\acb-graphics.ps1 -Set Max -RefreshRate 144
 #>
 [CmdletBinding(DefaultParameterSetName = 'Status')]
 param(
     [Parameter(ParameterSetName = 'Set', Mandatory)]
-    [ValidateSet('Menu', 'Beyond')]
+    [ValidateSet('Max', 'Beyond')]
     [string]$Set,
 
     [Parameter(ParameterSetName = 'Status')] [switch]$Status,
@@ -57,58 +70,122 @@ param(
     [Parameter(ParameterSetName = 'Set')]
     [int]$RefreshRate = 0,
 
+    # SavedSP is the file ACBMP.exe demonstrably writes. GameMP is the
+    # game-directory ACBrotherhoodMP.ini, which it demonstrably does not.
+    [ValidateSet('SavedSP', 'GameMP')]
+    [string]$File = 'SavedSP',
+
     [string]$GamePath = "C:\Program Files (x86)\Steam\steamapps\common\Assassins Creed Brotherhood"
 )
 
 $ErrorActionPreference = 'Stop'
 
-$ini     = Join-Path $GamePath "ACBrotherhoodMP.ini"
-$backup  = Join-Path $GamePath "_graphics_backup\ACBrotherhoodMP.ini.original"
+$saved   = Join-Path $env:USERPROFILE "Saved Games\Assassin's Creed Brotherhood"
+$savedSP = Join-Path $saved "ACBrotherhood.ini"
+$gameMP  = Join-Path $GamePath "ACBrotherhoodMP.ini"
+
+$ini     = if ($File -eq 'GameMP') { $gameMP } else { $savedSP }
+$backup  = Join-Path $GamePath ("_graphics_backup\" + (Split-Path $ini -Leaf) + ".original")
 $pending = Join-Path $PSScriptRoot "graphics-pending.json"
 
-# All three, because which file multiplayer honours is unresolved and a run that
-# rewrites a file we were not watching looks identical to one that rewrites
-# nothing. Baseline all of them; let the verify say which the game touched.
-$saved   = Join-Path $env:USERPROFILE "Saved Games\Assassin's Creed Brotherhood"
-$allInis = @($ini,
-             (Join-Path $saved "ACBrotherhood.ini"),
-             (Join-Path $saved "ACBrotherhoodMP.ini"))
+# Baseline all three whichever one is edited. A run that rewrites a file nobody
+# was watching looks identical to a run that rewrote nothing, and that mistake
+# is what made the first attempt at this unreadable.
+$allInis = @($savedSP, $gameMP, (Join-Path $saved "ACBrotherhoodMP.ini"))
 
-# Menu ceiling, and the sibling file's ranges. TextureQuality is 2 in both, so
-# the MP menu already reaches the engine ceiling there and nothing is claimed.
-$profiles = @{
-    Menu = [ordered]@{
-        OptionsPostFX            = 2
-        OptionsTextureQuality    = 2
-        OptionsShadowQuality     = 2
-        OptionsReflectionQuality = 2
-        OptionsCharacterQuality  = 2
+# The file the game writes uses BARE key names; the game-directory file uses the
+# Options* ones. TextureQuality stays at 2 in every profile: raising it was
+# tested and the game clamps it straight back, so asking again wastes a launch.
+$allProfiles = @{
+    SavedSP = @{
+        # The measured ceilings. Writing these is a restore, not an experiment.
+        Max = [ordered]@{
+            PostFX             = 1
+            TextureQuality     = 2
+            ShadowQuality      = 4
+            ReflectionQuality  = 3
+            CharacterQuality   = 4
+            EnvironmentQuality = 5
+        }
+        # Above every ceiling. Answered: the game rewrites each one back down.
+        Beyond = [ordered]@{
+            PostFX             = 9
+            TextureQuality     = 9
+            ShadowQuality      = 9
+            ReflectionQuality  = 9
+            CharacterQuality   = 9
+            EnvironmentQuality = 9
+        }
     }
-    Beyond = [ordered]@{
-        OptionsPostFX            = 2
-        OptionsTextureQuality    = 2
-        OptionsShadowQuality     = 4   # singleplayer ShadowQuality tops out here
-        OptionsReflectionQuality = 3   # singleplayer ReflectionQuality
-        OptionsCharacterQuality  = 4   # singleplayer CharacterQuality
+    GameMP = @{
+        Max = [ordered]@{
+            OptionsPostFX            = 2
+            OptionsTextureQuality    = 2
+            OptionsShadowQuality     = 2
+            OptionsReflectionQuality = 2
+            OptionsCharacterQuality  = 2
+        }
+        Beyond = [ordered]@{
+            OptionsPostFX            = 2
+            OptionsTextureQuality    = 2
+            OptionsShadowQuality     = 4
+            OptionsReflectionQuality = 3
+            OptionsCharacterQuality  = 4
+        }
     }
 }
+$profiles = $allProfiles[$File]
 
+# Only the [Graphics] section. ACBrotherhood.ini also holds [Startup], [Input]
+# and four keyboard-profile sections whose keys repeat (every profile has its own
+# VendorID), so a flat key=value read collides and a flat rewrite would destroy
+# the bindings.
 function Read-Ini([string]$path) {
     $map = [ordered]@{}
     if (-not (Test-Path $path)) { return $map }
+    $inGraphics = $false
     foreach ($line in [System.IO.File]::ReadAllLines($path)) {
-        if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
+        if ($line -match '^\s*\[(.+?)\]\s*$') { $inGraphics = ($Matches[1] -eq 'Graphics'); continue }
+        if ($inGraphics -and $line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
             $map[$Matches[1]] = $Matches[2]
         }
     }
     return $map
 }
 
-# The game writes this file itself: [Graphics] header, LF endings, no BOM.
-function Write-Ini([string]$path, $map) {
-    $lines = @('[Graphics]') + ($map.Keys | ForEach-Object { "$_=$($map[$_])" })
-    $text  = ($lines -join "`n") + "`n"
-    [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding $false))
+# Edit in place: replace matching keys inside [Graphics], append any that are
+# missing at the end of that section, and leave every other line untouched.
+function Write-Ini([string]$path, $updates) {
+    $raw = [System.IO.File]::ReadAllText($path)
+    $nl  = if ($raw -match "`r`n") { "`r`n" } else { "`n" }
+    $lines = [System.Collections.Generic.List[string]]([System.IO.File]::ReadAllLines($path))
+
+    $section = ''
+    $seen = @{}
+    $endOfGraphics = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^\s*\[(.+?)\]\s*$') {
+            if ($section -eq 'Graphics') { $endOfGraphics = $i }
+            $section = $Matches[1]
+            continue
+        }
+        if ($section -ne 'Graphics') { continue }
+        if ($lines[$i] -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=') {
+            $k = $Matches[1]
+            if ($updates.Contains($k)) { $lines[$i] = "$k=$($updates[$k])"; $seen[$k] = $true }
+        }
+    }
+    if ($section -eq 'Graphics') { $endOfGraphics = $lines.Count }
+    if ($endOfGraphics -lt 0) { throw "No [Graphics] section in $path" }
+
+    $missing = @($updates.Keys | Where-Object { -not $seen.ContainsKey($_) })
+    if ($missing.Count) {
+        $lines.InsertRange($endOfGraphics, [string[]]@($missing | ForEach-Object { "$_=$($updates[$_])" }))
+    }
+
+    $tail = if ($raw.EndsWith("`n")) { $nl } else { '' }
+    [System.IO.File]::WriteAllText($path, ($lines -join $nl) + $tail,
+                                   (New-Object System.Text.UTF8Encoding $false))
 }
 
 function Get-Fingerprint([string]$path) {
@@ -141,15 +218,16 @@ function Get-NativeMode {
 
 function Assert-GameClosed {
     if (Get-Process ACBMP -ErrorAction SilentlyContinue) {
-        Write-Host "ACBMP.exe is running. It rewrites this INI on exit and would" -ForegroundColor Red
-        Write-Host "overwrite anything written now. Close the game first." -ForegroundColor Red
+        Write-Host "ACBMP.exe is running. It reads this INI at STARTUP, so anything" -ForegroundColor Red
+        Write-Host "written now has already been missed - and the game may rewrite the" -ForegroundColor Red
+        Write-Host "file from what it loaded. Close the game, then set." -ForegroundColor Red
         exit 1
     }
 }
 
 if (-not (Test-Path $ini)) {
     Write-Host "No $ini." -ForegroundColor Yellow
-    Write-Host "Launch the multiplayer game once and quit - it writes the file on exit." -ForegroundColor Yellow
+    Write-Host "Launch the multiplayer game once - it writes the file shortly after startup." -ForegroundColor Yellow
     exit 1
 }
 
@@ -164,11 +242,12 @@ if ($PSCmdlet.ParameterSetName -eq 'Status') {
     Write-Host ("  {0,-26} {1,-8} {2}" -f '---', '-------', '----')
     foreach ($k in $cur.Keys) {
         $note = ''
-        if ($profiles.Beyond.Contains($k)) {
-            $hi = $profiles.Beyond[$k]
-            if ([int]$cur[$k] -lt $hi) { $note = "menu ceiling; singleplayer range reaches $hi" }
-            elseif ($hi -eq 2)         { $note = 'at the engine ceiling' }
-            else                       { $note = 'above the menu ceiling' }
+        if ($profiles.Max.Contains($k)) {
+            $hi = $profiles.Max[$k]
+            $now = 0; [void][int]::TryParse("$($cur[$k])", [ref]$now)
+            if     ($now -lt $hi) { $note = "below its measured ceiling of $hi" }
+            elseif ($now -eq $hi) { $note = 'at its measured ceiling' }
+            else                  { $note = "above the ceiling of $hi - the game clamps this on next launch" }
         }
         if ($k -eq 'RefreshRate' -and $native -and [int]$cur[$k] -lt $native.Refresh) {
             $note = "display runs at $($native.Refresh) Hz"
@@ -200,7 +279,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Verify') {
         exit 1
     }
     if (Get-Process ACBMP -ErrorAction SilentlyContinue) {
-        Write-Host "The game is still running - it writes the INI on exit. Quit first." -ForegroundColor Yellow
+        Write-Host "The game is still running. Let it finish writing, or quit, then verify." -ForegroundColor Yellow
         exit 1
     }
     $state = Get-Content $pending -Raw | ConvertFrom-Json
@@ -226,8 +305,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Verify') {
     if (-not $targetRewritten) {
         Write-Host "  The game did not rewrite the file we edited." -ForegroundColor Yellow
         Write-Host "  This run says NOTHING about these keys - not that they were honoured," -ForegroundColor Yellow
-        Write-Host "  not that they clamped. The usual cause is exiting by killing the" -ForegroundColor Yellow
-        Write-Host "  process instead of through the menu, which skips the write entirely." -ForegroundColor Yellow
+        Write-Host "  not that they clamped. Either the game never started, or it does not" -ForegroundColor Yellow
+        Write-Host "  write this file at all - which is exactly true of the game-directory" -ForegroundColor Yellow
+        Write-Host "  ACBrotherhoodMP.ini, so check -File if you targeted that one." -ForegroundColor Yellow
         if (@($state.Baseline | Where-Object { (Get-Fingerprint $_.Path).Hash -ne $_.Hash }).Count) {
             Write-Host "  Note that another INI above DID change - that is where to look next." -ForegroundColor Cyan
         }
@@ -310,14 +390,14 @@ if ($Set -eq 'Beyond') {
     } | ConvertTo-Json -Depth 4 | Set-Content -Path $pending -Encoding utf8
 
     Write-Host "  These are ABOVE what the options menu can select, and untested." -ForegroundColor Cyan
-    Write-Host "  Play one match, then quit THROUGH THE MENU and run:" -ForegroundColor Cyan
+    Write-Host "  The game writes this file at STARTUP, so the test is cheap - launch," -ForegroundColor Cyan
+    Write-Host "  wait about fifteen seconds, quit however you like, then run:" -ForegroundColor Cyan
     Write-Host "      powershell -File tools\acb-graphics.ps1 -Verify"
     Write-Host ""
-    Write-Host "  Killing the game instead of exiting through the menu skips the" -ForegroundColor Yellow
-    Write-Host "  write-on-exit, and a file the game never wrote still holds these" -ForegroundColor Yellow
-    Write-Host "  values - which reads as a pass and is not one. -Verify checks" -ForegroundColor Yellow
-    Write-Host "  whether the file was rewritten before it believes any value." -ForegroundColor Yellow
-    Write-Host "  Do not touch the in-game graphics menu in between either - saving" -ForegroundColor DarkGray
-    Write-Host "  it writes the menu's own values back over these." -ForegroundColor DarkGray
+    Write-Host "  A file the game never wrote still holds these values, which reads as" -ForegroundColor Yellow
+    Write-Host "  a pass and is not one. -Verify checks whether the file was rewritten" -ForegroundColor Yellow
+    Write-Host "  before it believes any value." -ForegroundColor Yellow
+    Write-Host "  Do not touch the in-game graphics menu in between - saving it writes" -ForegroundColor DarkGray
+    Write-Host "  the menu's own values back over these." -ForegroundColor DarkGray
     Write-Host ""
 }

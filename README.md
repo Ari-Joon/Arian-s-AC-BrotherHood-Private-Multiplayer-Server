@@ -166,29 +166,70 @@ Do not assume the convention splits by executable: `ACBSP.exe` contains the same
 holds `SupportedMSAAModes` and `GraphicsModified`, which cannot be INI keys at
 all, so some of those names are runtime properties rather than file keys.
 
-Settling it needs one clean run: raise the keys with the game closed, exit
-**through the menu**, re-read. Killing the process proves nothing — write-on-exit
-is the whole mechanism.
+#### Answered, and the answer is no
+
+Measured: `ACBMP.exe` rewrites `Saved Games\ACBrotherhood.ini` and leaves **both**
+MP-named files untouched, so the game-directory file — real, and genuinely
+missed until now — is never read. Every key was then armed at 9 and the game
+launched. It wrote back:
+
+| key | ceiling |
+|---|---|
+| `TextureQuality` | **2** |
+| `EnvironmentQuality` | 5 |
+| `ShadowQuality` | 4 |
+| `ReflectionQuality` | 3 |
+| `CharacterQuality` | 4 |
+| `MultiSampleType` | 8 |
+| `PostFX` | 1 |
+
+**Every key clamped to the value it already held.** The configuration was already
+at maximum on every axis before anyone touched it, so there is no hidden INI
+headroom — not for textures, not for shadows, not for anything. The ceilings are
+per-key rather than one scale, and `TextureQuality`'s 2 is genuinely lower than
+the rest rather than a universal cap.
+
+This is worth reading as a *positive* result: the avenue is closed and nobody
+needs to try it again. What remains for image quality is driver-forced
+anisotropic filtering, the command-line switches, and replacing the texture
+assets themselves.
+
+`VSync=1` and `RefreshRate=240` survived, but they were never raised above a
+valid value, so that shows only that the game re-emits them — not that it
+honours them.
+
+Two method notes for anyone scripting this. The game writes the file **early,
+while the process is alive**, not on exit — so the test is launch, wait, read,
+with no menu exit needed. And a bare `ACBMP.exe` launch exits immediately with
+code 41 and writes nothing: it needs `/onlineUser` and `/onlinePassword` to get
+far enough to write its config, and without them a run looks exactly like "the
+keys are inert".
 
 ```
 powershell -File tools\acb-graphics.ps1 -Status
-powershell -File tools\acb-graphics.ps1 -Set Beyond
-powershell -File tools\acb-graphics.ps1 -Verify     # after playing once and quitting
+powershell -File tools\acb-graphics.ps1 -Set Max     # put every key back at its ceiling
+powershell -File tools\acb-graphics.ps1 -Set Beyond  # the experiment above, reproducible
+powershell -File tools\acb-graphics.ps1 -Verify      # after one launch
 powershell -File tools\acb-graphics.ps1 -Restore
 ```
 
-The game rewrites this INI **on exit**, which is what makes the test work: set
-the values, play a match, then quit **through the menu**. Do not open the in-game
-graphics menu in between — saving it writes the menu's own values back over
-yours. The script refuses to write while `ACBMP.exe` is running, and keeps a
-backup of the original.
+`-Set Max` is the one worth running: it puts every key back at its measured
+ceiling, which is useful after the in-game menu has lowered something. `-Set
+Beyond` is kept so the closed experiment can be reproduced, not because it will
+find anything.
+
+The game writes this INI **early, with the process alive**, so the test is
+launch, wait about fifteen seconds, read. Do not open the in-game graphics menu
+in between — saving it writes the menu's own values back over yours. The script
+refuses to write while `ACBMP.exe` is running, edits only the `[Graphics]`
+section so the input profiles in that file survive untouched, and keeps a backup.
 
 `-Verify` checks **whether the game rewrote the file** before it believes any
 value, because a value comparison alone cannot tell a pass from a non-run:
 
 | what `-Verify` sees | what it means |
 |---|---|
-| file unchanged | the run says **nothing** — usually the game was killed rather than exited, so the write never happened |
+| file unchanged | the run says **nothing** — the game never started, or does not write that file at all |
 | rewritten, key gone | **inert** — the game rewrote the file and did not re-emit that key |
 | rewritten, value back to 2 | **read and clamped** |
 | rewritten, value still 5 | **read and honoured** — real headroom the menu never offers |

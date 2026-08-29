@@ -65,8 +65,13 @@ Referenced by name in the binary:
     ACBrotherhoodMP.ini    <- multiplayer [Graphics]   *** easy to miss ***
 ```
 
-The game writes these **on exit**, not when a setting changes. All three are
-plain ASCII with LF endings on disk, despite the `...W` API calls.
+The game writes its config **early in startup, with the process alive** — not on
+exit. A watcher caught `ACBrotherhood.ini` change twice within seconds of launch,
+and a run ended with `Stop-Process -Force` still found the file already rewritten.
+"Written on exit" appeared throughout this document and was wrong; it made a
+clean menu exit look necessary for any config experiment, and it is not.
+
+All three are plain ASCII with LF endings on disk, despite the `...W` API calls.
 
 **Singleplayer quality values are clamped.** Setting the five quality keys in
 `ACBrotherhood.ini` one step above the in-game maximum and relaunching results in
@@ -156,12 +161,40 @@ file is read.
 in the display driver is the only route, and it is likely the single largest
 untapped fidelity win on ground and wall textures.
 
-#### The experiment
+#### The experiment, and its answer: no headroom anywhere
 
-`tools/acb-graphics.ps1 -Set Beyond` writes the higher values; play once, exit
-**through the menu**, then `-Verify` reads back what the game kept. Killing the
-process skips the write-on-exit entirely and yields a result indistinguishable
-from a pass. Record the answer here.
+`ACBMP.exe` rewrites `Saved Games\ACBrotherhood.ini` and leaves **both** MP-named
+files untouched. The game-directory file was a real discovery and is never read.
+
+Every key was then armed at 9 and the game launched. It wrote back:
+
+```
+TextureQuality  9 -> 2      EnvironmentQuality 9 -> 5
+ShadowQuality   9 -> 4      ReflectionQuality  9 -> 3
+CharacterQuality 9 -> 4     MultiSampleType    9 -> 8
+PostFX          9 -> 1
+```
+
+**Every key clamped to the value it already held.** The configuration was already
+at maximum on every axis. The ceilings are per-key, not one scale, and
+`TextureQuality`'s 2 is genuinely lower than the others rather than a cap that
+applies to everything. The INI avenue is closed, and that is a result rather than
+a failure: it does not need retrying.
+
+`VSync` and `RefreshRate` persisted at 1 and 240, but were never raised above a
+valid value, so that shows re-emission and not that the game honours them.
+
+Two method notes, each of which cost a run:
+
+- A bare `ACBMP.exe` launch exits immediately with **code 41** and writes nothing.
+  It needs `/onlineUser` and `/onlinePassword` to reach the point where it writes
+  its config. Without them the run looks exactly like "the keys are inert" — a
+  false negative arriving through a different door than the one the verifier
+  guards.
+- `tools/acb-graphics.ps1 -Verify` checks whether the file was **rewritten** before
+  believing any value. Unchanged means the run proves nothing; a dropped key means
+  inert; a reverted value means clamped; a surviving value means honoured. Without
+  that distinction "still 9" and "never read" are the same observation.
 
 Two smaller things visible in the same file: `RefreshRate` was **60** on a
 240 Hz panel, and `MultiSampleType` is MSAA and is not a quality-menu entry, so
