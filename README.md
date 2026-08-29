@@ -115,6 +115,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/recolour-persona.ps1` | Recolour a whole persona at once, with matching tone |
 | `tools/bot_vm.py` | Behaviour VM for bot players — tiers, patrols, pursuit |
 | `tools/anvil-unpack/` | Unpack `.data` containers in batch, no GUI |
+| `tools/anvil-inflate/` | Inflate a container chunk — archives, `OPTIONS`, `.SAV` |
 
 ### Display modes
 
@@ -347,6 +348,7 @@ Findings from testing, recorded so nobody repeats the work.
 - **`.forge` modding does work.** AnvilToolkit unpacks the multiplayer archives, including `multi/DataPC_skins_*_dlc.forge`, into typed resources. That is the viable route for personas, armour and textures — but every player needs identical files, since gameplay is peer-to-peer.
 - **Challenges cannot be completed *from the server*.** The challenges screen makes **zero** server requests, so progress is entirely client-side and no server change can affect it. Whether it can be reached locally depends on the save container codec, which is unsolved.
 - **Stats do not persist.** `HermesPlayerStatisticsService` method 2 (write) discards everything it receives, and reads return hardcoded constants.
+- **Save files can be read.** `tools/anvil-inflate` inflates any container chunk via AnvilToolkit's `CompressedFileData`, which understands the per-block table that hand-parsing misses. `ACBROTHERHOODSAVEGAME0.SAV` opens to 252,401 bytes and all four `OPTIONS` chunks open cleanly. The payloads are **hash-keyed binary** — 56–66% zeros, no readable field names — so opening them and locating challenge flags are different problems, and only the first is solved.
 - **Local save state exists**, contrary to an earlier claim here. `Saved Games/.../SAVES/OPTIONS` and the `.SAV` carry the same container magic as the game archives and are rewritten on exit. Whether challenge progress is among what they hold is unverified, but it can no longer be ruled out. The container codec is unsolved and now gates three separate things — GUI-free unpacking, save editing, and probably the `.cxb` payload. See [re/FINDINGS.md](re/FINDINGS.md).
 - **`GetPrivileges` and `GetRewards` were never observed being called** by the client, so the DLC and reward entries may never be read at all.
 - **New abilities are not possible.** The eight abilities are compiled into `ACBMP.exe`; the `.cxb` only supplies their parameters.
