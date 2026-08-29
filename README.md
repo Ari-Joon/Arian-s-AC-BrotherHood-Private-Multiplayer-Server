@@ -193,7 +193,7 @@ Do not assume the convention splits by executable: `ACBSP.exe` contains the same
 holds `SupportedMSAAModes` and `GraphicsModified`, which cannot be INI keys at
 all, so some of those names are runtime properties rather than file keys.
 
-#### Answered, and the answer is no
+#### Answered — three times, and the first two answers were wrong
 
 Measured: `ACBMP.exe` rewrites `Saved Games\ACBrotherhood.ini` and leaves **both**
 MP-named files untouched, so the game-directory file — real, and genuinely
@@ -210,20 +210,39 @@ launched. It wrote back:
 | `MultiSampleType` | 8 |
 | `PostFX` | 1 |
 
-**Every key clamped to the value it already held.** The configuration was already
-at maximum on every axis before anyone touched it, so there is no hidden INI
-headroom — not for textures, not for shadows, not for anything. The ceilings are
-per-key rather than one scale, and `TextureQuality`'s 2 is genuinely lower than
-the rest rather than a universal cap.
+**Every key clamped to the value it already held**, which looked conclusive and
+was not. Every value armed in that run was ABOVE the ceiling, and clamping an
+out-of-range value is indistinguishable from ignoring the file entirely. A second
+run armed `ShadowQuality=1` — still not a valid test, because nobody had checked
+the menu's *minimum*, so that was out of range too, and its rejection got written
+up here as proof the INI was an output. It is not.
 
-This is worth reading as a *positive* result: the avenue is closed and nobody
-needs to try it again. What remains for image quality is driver-forced
-anisotropic filtering, the command-line switches, and replacing the texture
-assets themselves.
+**The INI is read.** Arming `ShadowQuality=3`, a value genuinely in range, gives a
+menu reading of 4 and the value survives in the file across a launch. What
+actually happens is:
 
-`VSync=1` and `RefreshRate=240` survived, but they were never raised above a
-valid value, so that shows only that the game re-emits them — not that it
-honours them.
+| | |
+|---|---|
+| at startup | the game **reads and applies** the file, including out-of-range values — armed 3 and 4 displayed as menu 4 and 5 |
+| on write | it **clamps** to the menu maximum — Environment 6→5, Texture 4→2, Character 5→4 |
+
+So the ceiling can be exceeded **per session but not persistently**, and the
+persistence problem is solved by writing the value immediately before launch,
+which the launcher is positioned to do.
+
+**What is still unverified is whether exceeding it renders anything differently.**
+Displaying a number and sampling at it are separate claims. Until a same-scene
+comparison at two settings says otherwise, "the menu was hiding steps" is a
+statement about a menu, not about pixels.
+
+`ReflectionQuality` and `PostFX` are **not numeric scales** — the menu shows them
+as `HIGH` and `ON`. Their "ceilings" of 3 and 1 are enum indices, so pushing them
+past maximum is not a meaningful experiment the way it is for the others.
+
+**`RefreshRate=240` is honoured**, and this one is settled: the game's own options
+screen reports `2560x1600, 240Hz`. That is the engine stating its mode back,
+which is stronger than the file agreeing with itself. An earlier note here said
+it was merely re-emitted and unproven; that is superseded.
 
 Two method notes for anyone scripting this. The game writes the file **early,
 while the process is alive**, not on exit — so the test is launch, wait, read,

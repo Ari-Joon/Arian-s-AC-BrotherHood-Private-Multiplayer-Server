@@ -15,9 +15,21 @@
 
   These have NO switch and exist only as INI keys and menu items:
   TextureQuality, EnvironmentQuality, CharacterQuality, ReflectionQuality,
-  VSync, Resolution. They are shown here as read-only status, because writing
-  them has been tested and the game rewrites the file back to its own values.
-  Every one is already at its ceiling, so there is nothing to gain by trying.
+  VSync, Resolution. They are shown here as read-only STATUS, and the reason is
+  narrower than it first appeared: the game DOES read the INI at startup and does
+  apply what it finds, including values above the menu maximum - it just clamps
+  them back down when it writes the file. So a control here would work per
+  session and would need rewriting before every launch.
+
+  It is not offered yet because whether an above-maximum value changes a single
+  RENDERED pixel is unverified. The menu displays 4 when 3 is armed; that is a
+  statement about the menu. Shipping sliders whose effect nobody has confirmed
+  would be worse than showing a number. Revisit once a same-scene comparison at
+  two settings settles it.
+
+  ReflectionQuality and PostFX are an ENUM and a BOOLEAN, not numeric scales -
+  the menu shows them as HIGH and ON. Their "ceilings" of 3 and 1 are enum
+  indices, so pushing them past a maximum is not meaningful for those two.
 
   Four of the controls here have no in-game equivalent at all - full mip chains,
   atlas mipmaps, ambient occlusion and draw distance. Those are the ones this
@@ -113,10 +125,15 @@ foreach ($r in $standard) {
 # Read-only on purpose. Every one of these is already at its measured ceiling
 # and the game rewrites the file from its own state, so a control here would be
 # a control that silently does nothing.
+# Numeric keys only. The menu displays these 1-based while the file is 0-based,
+# confirmed across the whole set: menu 6/3/5/5 against file 5/2/4/4.
 $CEILINGS = [ordered]@{
     TextureQuality = 2; EnvironmentQuality = 5; ShadowQuality = 4
-    ReflectionQuality = 3; CharacterQuality = 4; PostFX = 1
+    CharacterQuality = 4
 }
+# Not numeric. ReflectionQuality reads HIGH and PostFX reads ON in the menu, so
+# their file values are enum indices and a ceiling comparison is meaningless.
+$ENUMS = @('ReflectionQuality', 'PostFX')
 function Get-IniGraphics {
     $map = [ordered]@{}
     if (-not (Test-Path $savedIni)) { return $map }
@@ -247,9 +264,12 @@ foreach ($k in $CEILINGS.Keys) {
         $iniBits += "$k $($ini[$k])$at"
     }
 }
+foreach ($k in $ENUMS) {
+    if ($ini.Contains($k)) { $iniBits += "$k $($ini[$k]) (enum)" }
+}
 if ($iniBits.Count) {
     [void](Add-Text (($iniBits -join '   ') -replace '(.{62}\S*)\s', "`$1`n") 32 686 $fSmall $cMuted)
-    [void](Add-Text "Read-only. These have no command-line switch, and the game rewrites`nthem from its own state - all six are already at their ceiling." 32 722 $fSmall $cMuted)
+    [void](Add-Text "Read-only. No command-line switch reaches these. The game reads`nthem at startup but clamps above-maximum values when it writes, and whether a`nhigher value renders differently is not yet verified." 32 722 $fSmall $cMuted)
 } else {
     [void](Add-Text "No [Graphics] section found - launch the game once." 32 686 $fSmall $cMuted)
 }

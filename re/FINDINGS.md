@@ -175,14 +175,43 @@ CharacterQuality 9 -> 4     MultiSampleType    9 -> 8
 PostFX          9 -> 1
 ```
 
-**Every key clamped to the value it already held.** The configuration was already
-at maximum on every axis. The ceilings are per-key, not one scale, and
-`TextureQuality`'s 2 is genuinely lower than the others rather than a cap that
-applies to everything. The INI avenue is closed, and that is a result rather than
-a failure: it does not need retrying.
+**Every key clamped to the value it already held** — which looked conclusive and
+was not, because every value armed was ABOVE the ceiling and clamping an
+out-of-range value is indistinguishable from ignoring the file. Two later runs
+settled it properly, in opposite directions:
 
-`VSync` and `RefreshRate` persisted at 1 and 240, but were never raised above a
-valid value, so that shows re-emission and not that the game honours them.
+```
+armed ShadowQuality=1  ->  file came back 4     read as "the INI is an output"
+                           WRONG: nobody checked the menu MINIMUM, so 1 was
+                           also out of range and this was another rejection
+
+armed ShadowQuality=3  ->  menu displays 4, file keeps 3 across a launch
+                           The INI is READ. In-range values persist.
+armed Texture=3, 4     ->  menu displays 4, then 5
+                           Out-of-range values are read and DISPLAYED, then
+                           CLAMPED when the game writes: 6->5, 4->2, 5->4
+```
+
+So the model is **read and apply at startup, clamp on write**. The ceiling is
+exceedable per session and not persistently, and re-arming immediately before
+each launch is what makes it stick — a thing the launcher is positioned to do.
+
+**Unverified, and the distinction matters:** whether an out-of-range value renders
+anything differently. Displaying a number and sampling at it are separate claims,
+and both were collapsed into one more than once during this. Resident is not
+sampled either, which is the same error from the asset side.
+
+`ReflectionQuality` and `PostFX` are **enums, not numeric ranges** — the menu
+reads `HIGH` and `ON`. Their ceilings of 3 and 1 are enum indices, so "push it one
+past the maximum" is not a meaningful experiment for those two.
+
+**`RefreshRate=240` IS honoured.** The options screen reports `2560x1600, 240Hz`
+— the engine stating its own mode, which is stronger evidence than the file
+agreeing with itself. An earlier line here calling it merely re-emitted is
+superseded.
+
+The +1 mapping is confirmed across the whole set rather than inferred from one
+key: menu 6/3/5/5 against file 5/2/4/4.
 
 Two method notes, each of which cost a run:
 
