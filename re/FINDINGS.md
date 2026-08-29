@@ -146,9 +146,34 @@ PlayStation prompts are a **texture swap, not a code change** — copy the PS3
 texture into the slot the game requests, or find the selector that chooses
 between them.
 
-Blocked only on AnvilToolkit's **Repack**, which has not yet succeeded. Repack
-is currently the single blocker for three separate mods: persona recolouring,
-weapon-model swaps, and these glyphs.
+### WORKING RECIPE (verified 29 Aug 2026)
+
+The controller diagram now renders as a PlayStation DualShock in-game. Method:
+
+1. Unpack `DataPC_extra.forge`, then unpack **both**
+   `1000_-_Binding_360_DiffuseMapDesc.data` and
+   `1001_-_Binding_PS3_DiffuseMapDesc.data`.
+   Each yields a `TextureMapSpec` (208 B) and a `TextureMap` (262,295 B) --
+   identical sizes, both 512x512 `BC2_UNORM`.
+2. Copy the **PS3 `TextureMap`** over the **360 `TextureMap`**.
+3. **Critical:** patch the 4-byte File ID at **offset 2** back to the 360's own
+   value. The IDs are the only header difference:
+   - 360: `af e3 3f 1d` = `0x1D3FE3AF` (490726319)
+   - PS3: `79 e3 3f 1d` = `0x1D3FE379` (490726265)
+   Without this the game cannot bind the texture and draws a flat grey block.
+4. Repack the inner `.data`, then repack the forge. **Close the game first** --
+   it holds the forge open and Repack fails silently otherwise.
+
+Two earlier attempts failed and are worth recording:
+- Swapping the whole `.data` container: different compressed sizes, corrupted
+  the resource ("Unable to read beyond the end of the stream" on repack).
+- Swapping the `TextureMap` alone: carried the PS3 File ID, so the texture
+  would not bind and rendered grey.
+
+**Scope:** `Binding_360` drives the CONTROLLER LAYOUT diagram only. Footer
+prompt icons come from a different atlas and remain Xbox. `Tips_Hud_Extend_*`
+and `Tips_CrossAir_*` exist as 360/PS3 pairs and should respond to the same
+recipe.
 
 Context: a DualSense reaches the game through DS4Windows + ViGEm as a virtual
 Xbox 360 pad, so the game legitimately believes it is an Xbox controller and
