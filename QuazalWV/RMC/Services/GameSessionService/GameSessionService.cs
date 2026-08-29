@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -210,10 +211,15 @@ namespace QuazalWV
                         ClientInfo result = Global.Clients.Find(c => c.User.Pid == pid);
                         if (result != null)
                         {
-                            if (result.InGameSession == true)
+                            // Only a move BETWEEN sessions is an abandonment. Re-adding a
+                            // player to the session they are already in must not mark them
+                            // as abandoning it: AbandonSession (case 23) acts on
+                            // AbandonedSessionID in preference to the requested session, so
+                            // the flag would evict them from the live session on their next
+                            // abandon and could delete it once empty.
+                            if (result.InGameSession == true && result.GameSessionID != reqAddParticip.Key.SessionId)
                             {
-                                Log.WriteRmcLine(1, $"{result.User.Name} already in session {result.GameSessionID} on AddParticipants for session {reqAddParticip.Key.SessionId}", protocol, LogSource.RMC, Color.Orange, client);
-                                var future_abandoned  = Global.Sessions.Find(session => session.Key.SessionId == result.GameSessionID);
+                                Log.WriteRmcLine(1, $"{result.User.Name} moving from session {result.GameSessionID} to {reqAddParticip.Key.SessionId} on AddParticipants", protocol, LogSource.RMC, Color.Orange, client);
                                 result.AbandoningSession = true;
                                 result.AbandonedSessionID = result.GameSessionID;
                             }
@@ -229,10 +235,15 @@ namespace QuazalWV
                         ClientInfo result = Global.Clients.Find(c => c.User.Pid == pid);
                         if (result != null)
                         {
-                            if (result.InGameSession == true)
+                            // Only a move BETWEEN sessions is an abandonment. Re-adding a
+                            // player to the session they are already in must not mark them
+                            // as abandoning it: AbandonSession (case 23) acts on
+                            // AbandonedSessionID in preference to the requested session, so
+                            // the flag would evict them from the live session on their next
+                            // abandon and could delete it once empty.
+                            if (result.InGameSession == true && result.GameSessionID != reqAddParticip.Key.SessionId)
                             {
-                                Log.WriteRmcLine(1, $"{result.User.Name} already in session {result.GameSessionID} on AddParticipants for session {reqAddParticip.Key.SessionId}", protocol, LogSource.RMC, Color.Orange, client);
-                                var future_abandoned = Global.Sessions.Find(session => session.Key.SessionId == result.GameSessionID);
+                                Log.WriteRmcLine(1, $"{result.User.Name} moving from session {result.GameSessionID} to {reqAddParticip.Key.SessionId} on AddParticipants", protocol, LogSource.RMC, Color.Orange, client);
                                 result.AbandoningSession = true;
                                 result.AbandonedSessionID = result.GameSessionID;
                             }
@@ -303,6 +314,40 @@ namespace QuazalWV
                     var reqAcceptInvite = (RMCPacketRequestGameSessionService_AcceptInvitation)rmc.request;
                     reply = new RMCPResponseEmpty();
                     RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);
+
+                    // Join the accepting player to the host's session.
+                    //
+                    // Without this the server acknowledged the acceptance and told the
+                    // host about it, but never made the player a participant. The host's
+                    // lobby listed them (it acts on the notification below) while the
+                    // server still reported IsInSession=no for them, the session's slot
+                    // count never rose, and the match sat on its loading screen counting
+                    // one player. AddParticipants (case 8) has always done this properly;
+                    // accepting an invitation did not.
+                    uint acceptedSesId = reqAcceptInvite.InvitationRecv.SessionKey.SessionId;
+                    var acceptedSes = Global.Sessions.Find(ses => ses.Key.SessionId == acceptedSesId);
+                    if (acceptedSes == null)
+                        Log.WriteRmcLine(1, $"AcceptInvitation: session {acceptedSesId} not found", protocol, LogSource.RMC, Color.Red, client);
+                    else if (acceptedSes.PublicPids.Contains(client.User.Pid) || acceptedSes.PrivatePids.Contains(client.User.Pid))
+                        Log.WriteRmcLine(1, $"{client.User.Name} already a participant of session {acceptedSesId}", protocol, LogSource.RMC, Color.Orange, client);
+                    else
+                    {
+                        // Mirror case 8: if they were in another session, mark it abandoned.
+                        if (client.InGameSession && client.GameSessionID != acceptedSesId)
+                        {
+                            client.AbandoningSession = true;
+                            client.AbandonedSessionID = client.GameSessionID;
+                        }
+                        var sesType = acceptedSes.GameSession.Attributes.Find(pr => pr.Id == (uint)SessionParam.SessionType);
+                        bool joinPrivate = sesType != null && sesType.Value == (uint)SessionType.PRIVATE;
+                        var joiner = new List<uint> { client.User.Pid };
+                        var empty = new List<uint>();
+                        acceptedSes.AddParticipants(joinPrivate ? empty : joiner, joinPrivate ? joiner : empty);
+                        client.GameSessionID = acceptedSesId;
+                        client.InGameSession = true;
+                        Log.WriteRmcLine(1, $"{client.User.Name} joined session {acceptedSesId} on invite accept ({(joinPrivate ? "private" : "public")} slot)", protocol, LogSource.RMC, Color.Green, client);
+                    }
+
                     // invite accepted notif
                     inviter = Global.Clients.Find(c => c.User.Pid == reqAcceptInvite.InvitationRecv.SenderPid);
                     if (inviter != null)
