@@ -61,3 +61,13 @@ AnvilKit/
 
 # Third-party tooling, not part of this project
 DS4Windows/
+
+# Never redistribute game assets - extracts, exports and repacks stay local
+*.dds
+*.TextureMap
+*.TextureMap.bak
+*.forge
+*.data
+
+# Personal machine config backups (contain hardware IDs)
+re/ini-backup/

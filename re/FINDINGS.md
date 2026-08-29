@@ -197,6 +197,80 @@ Xbox 360 pad, so the game legitimately believes it is an Xbox controller and
 shows `Binding_360`. Swapping the texture is what makes the prompts match the
 hardware.
 
+## TextureMap layout (solved)
+
+Unpacking a `.data` yields a `.TextureMap`. The layout is the same in every
+archive tested:
+
+```
+  0 .. 89     header
+ 90 .. 90+N   raw BC blocks, exactly N bytes, all mip levels largest-first
+ then         61-byte trailer: format, width, height, mip count, repeated
+```
+
+Header fields, little-endian u32:
+
+| offset | meaning |
+|---|---|
+| 2 | File ID |
+| 10 / 14 | width / height |
+| 22 | format: `2` = BC1/DXT1, `4` = BC2/DXT3 |
+| 30 | sRGB flag |
+| 34 | mip count |
+| 84 | marker `0x1323` |
+| 86 | payload size N |
+| 90 | payload begins |
+
+**The 151-byte trap.** The trailer is always 61 bytes, so
+`filesize - payloadsize` is always `151` — which looks exactly like a header
+length and is not one. Reading from 151 shifts every block by 61 bytes. On BC2
+UI art the result still resembles the original closely enough to pass casual
+inspection; on a detailed BC1 character texture it is pure noise. That
+mismatch is what makes the error hard to spot: the *wrong* offset appears to
+work on the easy file and fails on the hard one.
+
+**Verified.** `BarberUp_DiffuseMap` was exported to DDS by AnvilToolkit and
+compared against the raw file: the DDS payload is byte-for-byte identical to
+`TextureMap[90:]`, all 699,064 bytes, 100% match. Recolouring the file at
+offset 90 and recolouring the DDS give identical results — same measured tonal
+range, same block statistics.
+
+**Consequence:** textures are plain BC blocks with no compression and no
+swizzle, in `DataPC.forge` as well as `DataPC_extra.forge`. They can be edited
+in place and repacked, with no DDS round-trip and no import step.
+
+## Recolouring personas
+
+`tools/recolour_texture.py` recolours a texture by transforming only the two
+RGB565 **endpoints** of each block and leaving the 2-bit index bits untouched.
+Every pixel changes colour while all detail, shading and edges survive exactly
+— BC interpolation does the work.
+
+Three things it has to get right, each found by testing:
+
+1. **Endpoint order is the BC1 mode flag.** `c0 > c1` means 4 opaque colours;
+   `c0 <= c1` means 3 colours plus transparent. Recolouring can reverse the
+   order and silently flip a block's mode. The tool detects this, swaps the
+   endpoints back and remaps the index bits (`0<->1`, and `2<->3` in 4-colour
+   mode). On the Barber this affected 22,110 of 87,383 blocks when reading at
+   the wrong offset, and 67 at the right one.
+2. **Nudge blue, not the packed value.** When both endpoints map to the same
+   colour, one must be nudged to preserve the mode. Decrementing the packed
+   u16 borrows out of the blue field and wraps blue to maximum, painting bright
+   blue speckle wherever a scheme has dark, blue-free shadows. Nudge the low 5
+   bits only.
+3. **Every mip level, not just the top one** — otherwise the character changes
+   colour as the camera pulls away.
+
+Personas are **atlases**: clothing, straps, boots and props share one sheet.
+`--grid` renders a labelled A1..H8 overlay and `--keep` holds named cells at
+their original colours.
+
+The Barber is **persona ID15**, deduced from resource adjacency
+(`214 barber_head`, `215 AC2MP_Weapon_ID15_RIGGED`, `228 BarberUp_Set`,
+`229 BarberBottom_Set`, `231 AC2MP_ID15_UPCustom_Set`). His weapon is a
+separate resource, so recolouring the outfit atlas cannot affect it.
+
 ## What this does *not* get you
 
 Adding new UI (a colour picker), new abilities, or new gameplay behaviour still

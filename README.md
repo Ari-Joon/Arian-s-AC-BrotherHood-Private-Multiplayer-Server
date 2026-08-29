@@ -111,6 +111,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/dlc-privileges.sql` | DLC entitlements + locale fix |
 | `tools/cxb_tool.py` | Parse the `gamesettings` `.cxb` container |
 | `tools/glyph-swap.ps1` | Switch the controller diagram between Xbox and PlayStation |
+| `tools/recolour_texture.py` | Recolour a persona or any BC1/BC2 texture, reversibly |
 
 ### Display modes
 
@@ -156,6 +157,45 @@ value (`0x1D3FE3AF`).
 **Scope:** this changes the CONTROLLER LAYOUT diagram. Footer prompt icons are
 drawn from `PC_btn_circle`, a PC-only texture with no PlayStation counterpart,
 with the letter drawn over it as text — so those stay as they are.
+
+### Recolouring personas
+
+`recolour_texture.py` recolours a character by transforming only the two RGB565
+**endpoints** of each compressed block and leaving the per-pixel index bits
+alone. Every pixel changes colour while all detail, shading, folds and stitching
+survive exactly — the block compression does the interpolation for you. There is
+no decode, no re-encode and no image editor involved.
+
+```
+python tools/recolour_texture.py --texture "<path>\1_-_BarberUp_DiffuseMap.TextureMap" \
+    --scheme gold_black --keep G2,H2,H3,H4 \
+    --backup "<game>\multi\_persona_backup\BarberUp_ORIGINAL.TextureMap" \
+    --preview out.png
+```
+
+| Option | Purpose |
+|---|---|
+| `--scheme` | `gold_black`, `crimson_black`, `emerald_black`, `sapphire_black`, `bone_white`, `desaturate` |
+| `--strength` | `0.0`–`1.0`, blend towards the scheme |
+| `--grid` | Render a labelled `A1..H8` overlay of the atlas |
+| `--keep` | Hold cells (`G2,H2`) or rects (`x0:y0:x1:y1`) at original colours |
+| `--levels` | Force one tonal range across every texture of an outfit so the halves match |
+| `--dry-run` | Preview only, write nothing |
+| `--restore` | Put the backup back |
+
+Character textures are **atlases** — clothing, straps, boots and props share one
+sheet. Use `--grid` to see the layout, then `--keep` to protect anything that
+should stay its original colour.
+
+Afterwards repack in AnvilToolkit, inner `.data` first, then the `.forge`, with
+the game closed.
+
+**Texture format.** A `.TextureMap` is a 90-byte header, then raw BC blocks for
+every mip level largest-first, then a 61-byte trailer. Because that trailer is
+always 61 bytes, `filesize - payloadsize` always equals `151`, which looks
+exactly like a header length and is not one — reading from there shifts every
+block by 61 bytes. See [re/FINDINGS.md](re/FINDINGS.md) for the full layout and
+the two bugs worth not repeating.
 
 ---
 
