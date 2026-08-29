@@ -375,6 +375,37 @@ What is known:
 Anyone continuing should start from the 49-byte index block, since it is small
 and its plaintext is partly known.
 
+## Texture formats across the multiplayer roster
+
+The `format` field at offset 22 takes **four** values, not the two the Barber
+alone suggested. Block size implied by each declared payload identifies them:
+
+| code | bytes/block | format | diffuse textures |
+|---|---|---|---|
+| 2 | 8 | BC1 / DXT1 | 36 |
+| 3 | 8 | BC1 variant (DXT1a) | 16 |
+| 4 | 16 | BC2 / DXT3 | 16 |
+| 5 | 16 | BC3 / DXT5 | 1 |
+
+Codes 2 and 3 can both be handled as BC1 provided endpoint-order mode is
+**preserved rather than assumed**; 4 and 5 keep colour in the second half of the
+block and always use the 4-colour interpretation, and their alpha halves are
+left untouched.
+
+This was found only by running the whole roster. A single persona is not a
+large enough sample to conclude a format is universal - the same shape of error
+as assuming a 21-entry switch list was complete when the binary registers 66.
+
+Two failure modes worth carrying elsewhere:
+
+- Mapping the format codes was not sufficient on its own. A **second, separate**
+  lookup - the human-readable format name - still raised `KeyError` for the
+  newly supported codes, so the fix appeared not to work.
+- In PowerShell, `$ErrorActionPreference = 'Stop'` turns any **stderr output
+  from a native command** into a terminating error. One bad input therefore
+  killed a 69-item batch after 7. Per-item exit codes with the loop continuing
+  is the fix, and this applies to any batch driving an external tool.
+
 ## Recolouring personas
 
 `tools/recolour_texture.py` recolours a texture by transforming only the two
