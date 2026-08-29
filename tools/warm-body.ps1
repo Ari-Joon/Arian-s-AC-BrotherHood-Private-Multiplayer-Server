@@ -73,6 +73,20 @@ param(
     [Parameter(ParameterSetName = 'Stop')]
     [switch]$Stop,
 
+    # How long to wait for a client to finish LOGGING IN before starting the
+    # next one. Waiting on a window handle is not enough - see the launch loop.
+    [Parameter(ParameterSetName = 'Run')]
+    [int]$ReadySeconds = 120,
+
+    # Extra pause after a client is ready, before the next is launched. Startup
+    # continues briefly after login, and overlapping that is what races ports.
+    [Parameter(ParameterSetName = 'Run')]
+    [int]$SettleSeconds = 8,
+
+    # The server's log. Used to detect a completed login; a client's account
+    # name only appears here once it holds a PRUDP session.
+    [string]$ServerLog,
+
     [string]$GamePath = "C:\Program Files (x86)\Steam\steamapps\common\Assassins Creed Brotherhood"
 )
 
@@ -215,6 +229,53 @@ if ($Macro) {
 
 # --- launch ----------------------------------------------------------------
 $procs = @()
+# release-guard lives beside this script. $guardProj was previously USED but
+# never assigned, so "dotnet run --project" got an empty path and failed every
+# time - which is why only the first bot ever started. The failure was quiet:
+# the guard went unreleased, and the next client then exited cleanly with code
+# 0 as though the game simply refused to run.
+$guardRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$guardProj = Join-Path $guardRoot 'release-guard'
+if (-not (Test-Path (Join-Path $guardProj 'release-guard.csproj'))) {
+    Write-Host "  release-guard not found at $guardProj" -ForegroundColor Red
+    Write-Host "  more than one client cannot be launched without it." -ForegroundColor Yellow
+}
+elseif (-not $DryRun) {
+    # Build once here so the per-client retries can use --no-build and stay fast.
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    & dotnet build $guardProj -v q --nologo 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Host "  release-guard failed to build" -ForegroundColor Yellow }
+    $ErrorActionPreference = $prevEAP
+}
+
+if (-not $ServerLog) {
+    $root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+    $ServerLog = Join-Path $root '..\ACB RDV\bin\x86\Release\log.txt'
+}
+
+# A stopped server is indistinguishable from a broken client if you are only
+# watching the game window: clients start, sit there, and quietly exit. An hour
+# of test results was thrown away to this, so it is checked up front.
+if (-not (Get-Process ACBRDV -ErrorAction SilentlyContinue)) {
+    Write-Host ""
+    Write-Host "  The server (ACBRDV.exe) is NOT running." -ForegroundColor Red
+    Write-Host "  Bots will start, fail to log in, and exit. Start it first." -ForegroundColor Yellow
+    if (-not $DryRun) { exit 1 }
+}
+$useLog = Test-Path $ServerLog
+if (-not $useLog) {
+    Write-Host "  server log not found at $ServerLog" -ForegroundColor DarkYellow
+    Write-Host "  falling back to a fixed wait between launches" -ForegroundColor DarkYellow
+}
+
+if ($accounts.Count -gt 1) {
+    Write-Host ""
+    Write-Host "  NOTE: on one PC only ONE client will survive." -ForegroundColor Yellow
+    Write-Host "  The first client binds UDP 7917/12000/12001 and every client after" -ForegroundColor DarkGray
+    Write-Host "  it dies with 0xC0000005. Tested at 6s and 120s spacing alike." -ForegroundColor DarkGray
+    Write-Host "  Bots need their own network stack - a VM or a second PC." -ForegroundColor DarkGray
+}
+
 $index = 0
 foreach ($a in $accounts) {
     # Explicit index: deriving it from $procs.Count silently collapses to 0 for
@@ -251,20 +312,110 @@ foreach ($a in $accounts) {
     $p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $GamePath -PassThru
     $procs += $p
     "$($p.Id),$($a.Name)" | Add-Content $pidFile
-    # Wait for a window before starting the next; two clients racing through
-    # startup is the likeliest way this falls over.
-    for ($w = 0; $w -lt 60; $w++) {
+    # WAIT FOR LOGIN, NOT FOR A WINDOW.
+    # This used to break out as soon as MainWindowHandle became non-zero. That
+    # handle appears at the SPLASH screen, long before the client has
+    # authenticated or bound its UDP ports, so the next client was routinely
+    # launched into the middle of the previous one's startup and the two raced
+    # for the fixed port set. Inconsistent bot behaviour traced back to here.
+    #
+    # The reliable signal is the server: an account name is only tagged in the
+    # log once that client holds a PRUDP session, i.e. it is really logged in.
+    $logMark = if ($useLog) { (Get-Item $ServerLog).Length } else { 0 }
+    $ready = $false
+    $seenInLog = $false
+    # The set a match needs. A client that holds none of these is not up yet.
+    $fixedPorts = @(7917, 9100, 12000, 12001)
+    for ($w = 1; $w -le $ReadySeconds; $w++) {
         Start-Sleep -Seconds 1
         $p.Refresh()
-        if ($p.HasExited) { Write-Host "   exited during startup (exit $($p.ExitCode))" -ForegroundColor Red; break }
-        if ($p.MainWindowHandle -ne 0) { Write-Host "   window up after ${w}s" -ForegroundColor DarkGray; break }
+        if ($p.HasExited) {
+            Write-Host "   exited during startup (exit $($p.ExitCode))" -ForegroundColor Red
+            break
+        }
+        if ($useLog) {
+            # Read only what is new; the log reaches hundreds of thousands of
+            # lines in a session and re-reading it every second is not free.
+            try {
+                $fs = [System.IO.File]::Open($ServerLog, 'Open', 'Read', 'ReadWrite')
+                try {
+                    if ($fs.Length -lt $logMark) { $logMark = 0 }   # server restarted, log truncated
+                    [void]$fs.Seek($logMark, 'Begin')
+                    $sr = New-Object System.IO.StreamReader($fs)
+                    $fresh = $sr.ReadToEnd()
+                } finally { $fs.Dispose() }
+                if ($fresh -match [regex]::Escape("[$($a.Name)]")) { $seenInLog = $true }
+            }
+            catch { }   # the server holds the log open; a failed read just retries
+
+            # The log tag appears at the first PRUDP handshake, which is only
+            # seconds in - well before the client has bound the fixed UDP
+            # ports. Those ports are the contended resource, so waiting on the
+            # tag alone still lets the next client race for them. Require both.
+            if ($seenInLog) {
+                $bound = @(Get-NetUDPEndpoint -OwningProcess $p.Id -ErrorAction SilentlyContinue |
+                           Where-Object { $fixedPorts -contains $_.LocalPort })
+                if ($bound.Count) {
+                    Write-Host ("   ready after {0}s (session up, holds {1})" -f $w, (($bound.LocalPort | Sort-Object) -join ', ')) -ForegroundColor DarkGray
+                    $ready = $true
+                    break
+                }
+            }
+        }
+        elseif ($p.MainWindowHandle -ne 0 -and $w -ge 45) {
+            # No log to watch, so fall back to a window plus a generous fixed
+            # wait. Slower than necessary, but it does not race.
+            Write-Host "   window up, waited ${w}s (no log to confirm login)" -ForegroundColor DarkGray
+            $ready = $true
+            break
+        }
+    }
+    if (-not $p.HasExited -and -not $ready) {
+        Write-Host "   never confirmed logged in after ${ReadySeconds}s - continuing anyway" -ForegroundColor Yellow
+        Write-Host "   if the next client misbehaves, this is why" -ForegroundColor DarkGray
+    }
+    # Let startup finish before anything else touches the ports.
+    if (-not $p.HasExited -and $index -lt $accounts.Count -and $SettleSeconds -gt 0) {
+        Start-Sleep -Seconds $SettleSeconds
     }
     # Release this client's single-instance guard so the NEXT one can start.
     # Must happen after it is up, since the semaphore is created during startup.
     if (-not $p.HasExited -and $index -lt $accounts.Count) {
-        $out = & dotnet run --project $guardProj --no-build -- $p.Id --close scimitar --quiet 2>&1
-        if ($LASTEXITCODE -eq 0) { Write-Host "   guard released" -ForegroundColor DarkGray }
-        else { Write-Host "   guard NOT released - the next client will refuse to start" -ForegroundColor Yellow
+        # $ErrorActionPreference is 'Stop', which turns ANY native command's
+        # stderr into a terminating error. dotnet writes build noise there, so
+        # this killed the run before the second bot was ever launched - the
+        # same trap that once aborted a 69-item batch after 7. Relax it just
+        # around the call and judge the result by the exit code instead.
+        # RETRY UNTIL IT EXISTS. The semaphore is created part-way through
+        # engine startup, so a client that is merely running does not have one
+        # yet - releasing at 3s finds nothing and reports success-by-omission,
+        # and the next client then exits cleanly with code 0 because the guard
+        # it collides with was created a moment later.
+        #
+        # Retrying until the release actually succeeds is the readiness signal
+        # that matters: it is precisely the condition the next launch needs.
+        # Port binding happens within seconds and the server log tag appears at
+        # the first handshake, so neither of those tells you this.
+        #
+        # $ErrorActionPreference is 'Stop', which turns ANY native command's
+        # stderr into a terminating error, and dotnet writes build noise there.
+        # That aborted the run before the second bot launched - the same trap
+        # that once killed a 69-item batch after 7. Relax it around the call
+        # and judge by the exit code.
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $guardCode = 1
+        $waited = 0
+        while ($guardCode -ne 0 -and $waited -lt $ReadySeconds) {
+            $p.Refresh()
+            if ($p.HasExited) { break }
+            $out = & dotnet run --project $guardProj --no-build -- $p.Id --close scimitar_semaphore --quiet 2>&1
+            $guardCode = $LASTEXITCODE
+            if ($guardCode -ne 0) { Start-Sleep -Seconds 3; $waited += 3 }
+        }
+        $ErrorActionPreference = $prevEAP
+        if ($guardCode -eq 0) { Write-Host "   guard released after ${waited}s" -ForegroundColor DarkGray }
+        else { Write-Host "   guard NOT released after ${waited}s - the next client will refuse to start" -ForegroundColor Yellow
                $out | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray } }
     }
 }

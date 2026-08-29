@@ -33,11 +33,29 @@ Scimitar is Ubisoft's codename for the Anvil engine. A second client finds it
 already exists and **exits after ~5 seconds with code 0** — a clean exit, which
 is why it reads as "the game refuses to start" rather than an error.
 
-Releasing that handle in the running client lets the next one start.
-`tools/release-guard` does this; `tools/warm-body.ps1` calls it between
-launches. **Four clients verified concurrent.** Nothing on disk is patched, and
-the handle must be released again after each launch because every new client
-creates the semaphore itself.
+Releasing that handle in the running client lets the next one get **past the
+check**. `tools/release-guard` does this; `tools/warm-body.ps1` calls it
+between launches. Nothing on disk is patched, and the handle must be released
+again after each launch because every new client creates the semaphore itself.
+
+**CORRECTION.** An earlier draft claimed "four clients verified concurrent".
+That was never true and is now disproved directly. Releasing the guard only
+changes *how* the second client fails:
+
+| Guard | Second client |
+|---|---|
+| held      | exits cleanly, code 0 (the check refused it) |
+| released  | exits `-1073741819` = `0xC0000005`, access violation |
+
+Measured with launches spaced 6 s apart and again with a full 120 s wait for
+the first client to finish starting - three bots each time, and only Bot1
+survived in every run. The user's own experience matches exactly: *"only bot1
+is loading everytime there's no one else not even jubblyjoon."*
+
+The likely mechanism is the port set. Once the first client has bound
+7917/12000/12001 the second cannot, and an unchecked bind failure dereferenced
+is what an access violation looks like. Spacing the launches makes this
+*worse*, not better: given time, the first client claims the whole set.
 
 Three wrong diagnoses preceded this, all disproved by testing:
 
@@ -210,7 +228,7 @@ than engineering.
 | Tool | Status |
 |---|---|
 | `tools/release-guard` | **Verified** — several clients in one session |
-| `tools/warm-body.ps1` | **Verified** for launching; menu macro uncalibrated |
+| `tools/warm-body.ps1` | **One client only.** Three real bugs fixed (below); multi-client still impossible |
 | `tools/bot-autoaccept.ps1` | **Unverified** — never observed accepting an invite |
 | `tools/bot_vm.py` | **Simulation only** — never driven a real client |
 | `tools/join-match.macro` | **Uncalibrated** starting point |
@@ -289,12 +307,31 @@ ones. A separate network stack - VM or second PC - remains the only fix.
 bots before playing. Bots are usable for lobby, presence and invite testing
 only, until they live on their own network stack.
 
-## A weakness in `warm-body.ps1`
+## Three real bugs in `warm-body.ps1`, all fixed
 
-It waits for a window handle before launching the next client. A window handle
-appears at the splash screen, well before login completes, so clients can be
-started while the previous one is still connecting and race for ports. If bots
-behave inconsistently, launch spacing is the first thing to suspect.
+Found while trying to make launch spacing reliable. All three were silent, and
+together they meant the script could never have launched a second client even
+if the game allowed it.
+
+1. **`$guardProj` was used but never assigned.** Line 385 ran
+   `dotnet run --project $guardProj`, which expanded to an empty path and
+   failed every time. The guard therefore went unreleased, and the next client
+   exited cleanly with code 0 - looking exactly like the game refusing to run.
+   This is the big one.
+2. **`--close scimitar` matched nothing.** `release-guard` was changed to match
+   the object's leaf name *exactly* (a substring match once released 49 handles
+   and killed a client), but this call site was never updated. Verified against
+   a live client: `scimitar` releases 0, `scimitar_semaphore` releases 1.
+3. **`$ErrorActionPreference = 'Stop'` made `dotnet`'s stderr fatal.** Build
+   noise on stderr aborted the whole run before the second bot launched - the
+   same trap that once killed a 69-item batch after 7.
+
+Launch spacing was also reworked: it waited on a window handle, which appears
+at the splash screen long before login. It now retries the guard release until
+it succeeds, which is the only condition that actually gates the next launch.
+
+**None of this makes two clients work.** The fixes are worth keeping because
+they turn a silent failure into an honest one, but the wall is the game's.
 
 ---
 
