@@ -28,7 +28,24 @@ param(
     [ValidateSet('default','on','off')] [string]$FullMips  = 'default',
     [ValidateSet('default','on','off')] [string]$AtlasMips = 'default',
     [ValidateSet('default','on','off')] [string]$AmbientOcclusion = 'default',
-    [int]$FarDist = 0
+    [int]$FarDist = 0,
+
+    # --- match rules ---------------------------------------------------------
+    # These edit the gamesettings the SERVER hands to clients, so they apply to
+    # everyone who joins - nobody else has to change anything on their machine.
+    # Rules are always rebuilt from the pristine backup, never from the current
+    # file, so passing -CooldownScale 0.5 twice does not end up at 0.25.
+    [double]$CooldownScale = 0,
+    [double]$DurationScale = 0,
+
+    # Precise overrides, repeatable: -AbilityRule AbilitySmokeBomb:Radius=8.0
+    [string[]]$AbilityRule,
+
+    # Put the shipped rules back.
+    [switch]$ResetRules,
+
+    # Apply the rules and stop, without launching server or game.
+    [switch]$RulesOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,6 +62,76 @@ if (-not $Password) {
     $Password = (sqlite3 "$db" "SELECT password FROM users WHERE name='$User';")
 }
 if (-not $User -or -not $Password) { Write-Error "Could not resolve an account from $db"; exit 1 }
+
+# --- match rules ------------------------------------------------------------
+# QuazalWV's PersistentStoreService serves gamesettings_c1380_d873_s6285.cxb
+# with File.ReadAllBytes at the moment a client requests it, so editing the
+# file here changes the rules for every player who joins. Done before the
+# server starts purely so the ordering is obvious; the server re-reads the
+# file per request either way.
+$cxb = Join-Path $server "gamesettings_c1380_d873_s6285.cxb"
+$bak = "$cxb.bak"
+
+if ($ResetRules) {
+    if (Test-Path $bak) {
+        Copy-Item $bak $cxb -Force
+        Write-Host "Match rules reset to the shipped values." -ForegroundColor Cyan
+    } else {
+        Write-Host "No backup at $bak - rules were never changed." -ForegroundColor DarkGray
+    }
+}
+elseif ($CooldownScale -or $DurationScale -or $AbilityRule) {
+    if (-not (Test-Path $cxb)) {
+        Write-Error "Cannot find $cxb - the server needs it to serve rules."
+        exit 1
+    }
+    # Keep one pristine copy. Every rule application starts from it, so
+    # repeated runs set an absolute value rather than compounding.
+    if (-not (Test-Path $bak)) { Copy-Item $cxb $bak }
+
+    $xml = Join-Path $env:TEMP "acb-ability.xml"
+    $cxbEdit = Join-Path $root "tools\cxb-edit"
+    $rules   = Join-Path $root "tools\ability_rules.py"
+
+    # dotnet and python write progress to stderr, which is a TERMINATING error
+    # while $ErrorActionPreference is 'Stop'. Relax it around them and judge by
+    # exit code instead - the same trap that has bitten three scripts here.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & dotnet run --project $cxbEdit --no-build -- extract $bak abilitymanagermulti $xml 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "could not read the rules out of $bak" }
+
+        $ruleArgs = @("--xml", $xml)
+        if ($CooldownScale) { $ruleArgs += @("--scale-cooldowns", $CooldownScale) }
+        if ($DurationScale) { $ruleArgs += @("--scale-durations", $DurationScale) }
+        foreach ($r in $AbilityRule) { $ruleArgs += @("--set", $r) }
+
+        $out = & python $rules @ruleArgs 2>&1
+        if ($LASTEXITCODE -ne 0) { throw ($out -join "`n") }
+
+        # cxb-edit verifies by re-reading its own output before writing, so a
+        # corrupt file is never served.
+        $out = & dotnet run --project $cxbEdit --no-build -- replace $cxb abilitymanagermulti $xml 2>&1
+        if ($LASTEXITCODE -ne 0) { throw ($out -join "`n") }
+
+        Write-Host "Match rules applied:" -ForegroundColor Cyan
+        if ($CooldownScale) { Write-Host ("  ability cooldowns x{0}" -f $CooldownScale) -ForegroundColor DarkGray }
+        if ($DurationScale) { Write-Host ("  ability durations x{0}" -f $DurationScale) -ForegroundColor DarkGray }
+        foreach ($r in $AbilityRule) { Write-Host "  $r" -ForegroundColor DarkGray }
+        Write-Host "  everyone who joins plays by these." -ForegroundColor DarkGray
+    }
+    catch {
+        Write-Warning "Match rules NOT applied: $_"
+        Write-Host "  the shipped rules are still in place." -ForegroundColor DarkGray
+    }
+    finally { $ErrorActionPreference = $prevEAP }
+}
+
+if ($RulesOnly) {
+    Write-Host "Rules only - not launching." -ForegroundColor DarkGray
+    exit 0
+}
 
 # --- start the server if it isn't already up --------------------------------
 if (-not (Get-Process ACBRDV -ErrorAction SilentlyContinue)) {
