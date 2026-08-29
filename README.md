@@ -112,6 +112,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/cxb_tool.py` | Parse the `gamesettings` `.cxb` container |
 | `tools/glyph-swap.ps1` | Switch the controller diagram between Xbox and PlayStation |
 | `tools/recolour_texture.py` | Recolour a persona or any BC1/BC2 texture, reversibly |
+| `tools/recolour-persona.ps1` | Recolour a whole persona at once, with matching tone |
 
 ### Display modes
 
@@ -192,6 +193,20 @@ should stay its original colour.
 while leather, wood and metal are strongly coloured, so a single threshold
 (around `25`) recolours the garment and leaves its fittings alone — no region
 picking, and it transfers to any persona.
+
+To do a whole character at once, use the wrapper — it finds every diffuse
+texture the persona owns, measures the tonal range **once** and forces it on all
+of them, so the halves match instead of drifting apart:
+
+```
+powershell -File toolsecolour-persona.ps1 -Persona Barber -Scheme gold_black
+powershell -File toolsecolour-persona.ps1 -Persona Barber -Status
+powershell -File toolsecolour-persona.ps1 -Persona Barber -Restore
+```
+
+It reports which of the persona's resources still need unpacking in AnvilToolkit.
+Head resources are skipped unless you pass `-IncludeHead`, since a recoloured
+face reads as a rendering bug rather than a costume.
 
 Afterwards repack in AnvilToolkit, inner `.data` first, then the `.forge`, with
 the game closed.
