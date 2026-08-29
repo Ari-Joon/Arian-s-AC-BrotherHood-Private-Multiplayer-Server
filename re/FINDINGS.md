@@ -279,18 +279,40 @@ correct bytes before failing - and AnvilToolkit symbols naming
 in the file**. No amount of codec guessing will succeed without that dictionary,
 and no dictionary file was found in either the game or AnvilToolkit.
 
-### The way through
+### SOLVED - by calling AnvilToolkit instead of reimplementing it
 
-AnvilToolkit already implements this. It ships `K4os.Compression.LZ4.dll`,
-`EasyCompressor.LZMA.dll` and `fast-lzma2.dll`, and it is .NET 9.
+The codec guess was right and the implementation was wrong.
+`Manager.GetCompressionAlgorithm(1, 2, Game.Brotherhood)` returns **LZO1X**,
+which is what the hand-written decompressor above was attempting. The block
+header even carries the parameters: `M+8` is `01 00 02 00`, which as two u16s
+is exactly `Algo=1, AlgoVersion=2`, the first two arguments of
+`Manager.Decompress(Algo, AlgoVersion, CData, UncompressedSize, Game)`.
 
-The machine has the .NET 9.0.19 **runtime** but no **SDK**, so its decompressor
-cannot be called from here. Installing the .NET SDK would allow a small C#
-program to load `AnvilToolkit.dll` and invoke its decompression directly -
-turning this from a reverse-engineering problem into an API call, and unlocking
-GUI-free unpacking, save editing and probably the `.cxb` payload at once.
+AnvilToolkit is .NET 9, so with the .NET SDK installed a small reflection host
+drives it directly. `tools/anvil-unpack` does this and **unpacks `.data`
+containers with no GUI at all** - 64 persona containers in one batch, 0
+failures.
 
-    https://dotnet.microsoft.com/download/dotnet/9.0
+Two things the GUI does at startup that a host must do itself, each of which
+costs an hour if you do not know it:
+
+1. **`HashedData.CheckStrings()` must be called.** It populates the ID-to-name
+   table. Without it the unpack throws `NullReferenceException` inside
+   `GetHashedString` *while writing files*, reports success, and leaves an
+   empty folder.
+2. **Do not pre-create the output folder.** `DataFile` treats an existing
+   folder as already unpacked and skips.
+
+Resource extensions still come out as numeric type IDs, since the extension
+table is not reachable from outside the app. The two that matter are mapped in
+the tool - `2729961751` = `TextureMap`, `3608045168` = `TextureSet` - and
+anything unknown keeps its numeric extension rather than being given a wrong
+one.
+
+The same `Manager.Decompress` should open `SAVES/OPTIONS`, which is the route
+to challenge progress. Not yet attempted: feeding it a bad offset crashes the
+native LZO with an access violation that kills the process, so the block
+boundaries need to be exact rather than swept.
 
 ## One codec gates almost everything left
 

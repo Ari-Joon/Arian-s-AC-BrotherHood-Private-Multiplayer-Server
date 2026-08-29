@@ -114,6 +114,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/recolour_texture.py` | Recolour a persona or any BC1/BC2 texture, reversibly |
 | `tools/recolour-persona.ps1` | Recolour a whole persona at once, with matching tone |
 | `tools/bot_vm.py` | Behaviour VM for bot players — tiers, patrols, pursuit |
+| `tools/anvil-unpack/` | Unpack `.data` containers in batch, no GUI |
 
 ### Display modes
 
@@ -246,6 +247,21 @@ face reads as a rendering bug rather than a costume.
 
 Afterwards repack in AnvilToolkit, inner `.data` first, then the `.forge`, with
 the game closed.
+
+#### Unpacking without the GUI
+
+`tools/anvil-unpack` drives AnvilToolkit's own code through reflection, so
+containers can be unpacked in batch instead of one click at a time. Needs the
+[.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
+
+```
+dotnet run --project tools/anvil-unpack -- --all "<game>\multi\Extracted\DataPC.forge" --filter _Set
+```
+
+64 persona containers in one pass. The container codec is LZO1X with the
+algorithm and version carried in each block header — but rather than
+reimplement it (an attempt that failed on the details), this calls
+`DataFile.Deserialize` directly and gets exactly what the GUI produces.
 
 **Texture format.** A `.TextureMap` is a 90-byte header, then raw BC blocks for
 every mip level largest-first, then a 61-byte trailer. Because that trailer is
