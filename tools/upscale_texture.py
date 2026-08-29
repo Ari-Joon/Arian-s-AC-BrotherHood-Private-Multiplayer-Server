@@ -159,7 +159,11 @@ def encode_level(img, code):
 def main():
     ap = argparse.ArgumentParser(description="Upscale an Anvil BC TextureMap.")
     ap.add_argument("--texture", required=True)
-    ap.add_argument("--scale", type=int, default=2, choices=(2, 4))
+    # 2x only. ACBMP.exe is a 32-bit LARGE_ADDRESS_AWARE PE, so 4 GB of
+    # address space total. The roster is already ~790 MB of texture data at
+    # 2x against a ~700 MB in-game working set; 4x cannot fit and would fail
+    # at load rather than look bad.
+    ap.add_argument("--scale", type=int, default=2, choices=(2,))
     ap.add_argument("--backup")
     ap.add_argument("--preview")
     ap.add_argument("--dry-run", action="store_true")

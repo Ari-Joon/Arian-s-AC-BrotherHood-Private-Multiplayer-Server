@@ -66,7 +66,8 @@ def main():
     ap.add_argument("--backup-dir", help="defaults to <game>\\multi\\_upscale_backup")
     ap.add_argument("--role", default="Diffuse",
                     help="comma-separated name filters; default Diffuse")
-    ap.add_argument("--scale", type=int, default=2, choices=(2, 4))
+    # 2x only - see upscale_texture.py; the 32-bit address space is the limit.
+    ap.add_argument("--scale", type=int, default=2, choices=(2,))
     ap.add_argument("--max-size", type=int, default=2048,
                     help="skip textures whose upscaled edge would exceed this")
     ap.add_argument("--dry-run", action="store_true")
