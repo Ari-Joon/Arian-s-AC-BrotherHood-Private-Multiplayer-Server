@@ -148,29 +148,46 @@ powershell -File tools\acb-launcher.ps1 -AmbientOcclusion on -FullMips on -Shado
 
 | control | switch | measured |
 |---|---|---|
-| Shadows | `/shadows:` | **unmeasured** — see below |
-| Post-processing | `/postfx:` | **unmeasured** — see below |
+| Shadows | `/shadows:` | **visible effect**, see below |
+| Post-processing | `/postfx:` | **visible effect**, see below |
 | Anti-aliasing | `/msaa:` | — |
 | Full mip chains | `/skipmips:off` + character + environment | +108.6 MB |
 | Atlas mipmaps | `/generateatlasmipmaps:on` | +111.5 MB |
 | Ambient occlusion | `/computeao:on /skipao:off` | -110.5 MB |
 | Draw distance | `/fardist:` | -60.9 MB at 10000 |
 
-`/shadows` and `/postfx` were measured for and the attempt **failed**, which is
-recorded rather than dropped. Both arms ran correctly and passed the right
-switches — verified by reading the live process command line, not the launcher's
-own label — but both peaked at 357 MB. A menu sits at 350—400 MB and the loaded
-world runs 700—900, so neither arm ever left the menu, and shadows and
-post-processing do not exist in a menu.
+`/shadows` and `/postfx` **do something**, established by comparing two frames in
+the world with every other switch held identical:
 
-An earlier version of that test reported an 84% pixel difference between the two
-arms and looked like a clean positive. It was the menu's animated background.
-The capture now triggers on the world being resident and marks itself void if it
-never gets there.
+![shadows and post-processing on and off](docs/images/shadows-postfx-ab.png)
 
-Completing it needs a human to drive the client into the tutorial while the
-switches are set; the game does not enter it unattended. Until then these two
-ship in `-Quality High` on the assumption that they work.
+| | luminance std |
+|---|---|
+| `/shadows:full /postfx:full` | **106** |
+| `/shadows:off /postfx:off` | **63** |
+
+A contrast collapse of that size is what losing shadow darkening and
+post-process tonemapping looks like. Before this they had shipped in
+`-Quality High` purely on the assumption that they worked.
+
+**The confound, stated rather than buried:** the two frames are from different
+camera positions, so a per-pixel diff between them measures where the player was
+standing. The luminance statistic is robust to that in a way a pixel diff is not,
+but this is evidence rather than proof.
+
+Three earlier attempts at this produced nothing and one produced a convincing
+lie. A fixed dwell captured the *main menu* in both arms — 357 MB against a
+350—400 MB menu and a 700—900 MB world — and reported an 84% pixel difference
+that was entirely the menu's animated background. The harness now triggers on the
+world being resident and marks a run void if it never gets there. The game does
+not enter the tutorial unattended, so this needs someone playing.
+
+**Memory could not attribute a per-map cost** and no figure is quoted for one.
+Across three runs, peak working set tracked how far into the session the player
+got more strongly than which textures were loaded — a vanilla-texture run peaked
+*higher* than an upscaled one. Picking the pair that fit the story would have
+given a clean 88 MB. The claim that does hold is the whole-roster one above:
+698 MB stock against 904 MB fully upscaled.
 
 The last four have **no in-game equivalent at all** — they are what the launcher
 genuinely adds over the options menu. The figures are peak working set against an
