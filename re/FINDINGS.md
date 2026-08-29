@@ -45,7 +45,7 @@ Referenced by name in the binary:
 
 | File | Notes |
 |---|---|
-| `ACBrotherhoodMP.ini` | multiplayer settings (UTF-16, matches the `...W` API calls) |
+| `ACBrotherhoodMP.ini` | multiplayer settings — **two files carry this name**, see below |
 | `ACBrotherhood.ini` | singleplayer settings |
 | `VertexShaderConfig.ini` | shader configuration |
 | `PixelShaderConfig.ini` | shader configuration |
@@ -57,18 +57,67 @@ Referenced by name in the binary:
 
 ```
 %USERPROFILE%\Saved Games\Assassin's Creed Brotherhood\
-    ACBrotherhood.ini      <- [Graphics] + input profiles (shared by SP and MP)
+    ACBrotherhood.ini      <- singleplayer [Graphics] + input profiles
     ACBrotherhoodMP.ini    <- multiplayer key bindings only
     SAVES\
+
+<game>\
+    ACBrotherhoodMP.ini    <- multiplayer [Graphics]   *** easy to miss ***
 ```
 
-The game writes these **on exit**, not when a setting changes.
+The game writes these **on exit**, not when a setting changes. All three are
+plain ASCII with LF endings on disk, despite the `...W` API calls.
 
-**Quality values are clamped.** Setting the five quality keys one step above the
-in-game maximum and relaunching results in the game rewriting them back down
-(6->5, 3->2, 5->4, 4->3, 5->4). The menu ceiling is the engine ceiling; there is
-no hidden visual headroom here. The INI is 0-indexed while the menu displays
-1-based, so menu "6" is `=5` in the file.
+**Singleplayer quality values are clamped.** Setting the five quality keys in
+`ACBrotherhood.ini` one step above the in-game maximum and relaunching results in
+the game rewriting them back down (6->5, 3->2, 5->4, 4->3, 5->4). The INI is
+0-indexed while the menu displays 1-based, so menu "6" is `=5` in the file. The
+resulting ceilings are:
+
+```
+EnvironmentQuality 5   TextureQuality 2   ShadowQuality 4
+ReflectionQuality  3   CharacterQuality 4
+```
+
+**This test says nothing about multiplayer** — see the next section. The earlier
+conclusion here, "the menu ceiling is the engine ceiling, there is no hidden
+visual headroom", was drawn from the wrong file.
+
+### There is a THIRD INI, and it is the one multiplayer reads
+
+```
+<game>\ACBrotherhoodMP.ini        <- multiplayer [Graphics]
+```
+
+Same filename as the Saved Games one, different directory, different contents —
+the Saved Games copy holds key bindings, this one holds graphics. It is written
+by `ACBMP.exe` on exit like the others, and it uses the `Options*` key names
+recovered from string analysis below, which were assumed to live in the Saved
+Games file and do not:
+
+```
+[Graphics]
+DisplayWidth=2560          MultiSampleType=8
+DisplayHeight=1600         Brightness=50
+RefreshRate=60
+OptionsPostFX=2            OptionsShadowQuality=2
+OptionsTextureQuality=2    OptionsReflectionQuality=2
+OptionsCharacterQuality=2
+```
+
+As shipped, **every quality key sits at 2** — the top of a three-step
+Low/Medium/High menu. But the sibling singleplayer keys have documented range
+well above that: shadows to 4, reflections to 3, characters to 4. Whether the
+multiplayer renderer accepts those values or clamps them back to 2 is
+**untested**, and it is the one place left where fidelity might be sitting
+unclaimed behind a menu that simply does not offer it.
+
+`tools/acb-graphics.ps1 -Set Beyond` writes the higher values; play once, quit,
+then `-Verify` reads back what the game kept. Record the answer here.
+
+Two smaller things visible in the same file: `RefreshRate` was **60** on a
+240 Hz panel, and `MultiSampleType` is MSAA and is not a quality-menu entry, so
+neither is subject to whatever the menu clamps.
 
 **Key bindings are fully open**, by contrast — `ACBrotherhoodMP.ini` holds
 complete scancode bindings for `[Keyboard]`, `[KeyboardAlt]`, `[KeyboardMouse2]`
@@ -99,8 +148,9 @@ OptionsCharacterQuality   Brightness
 OptionsSelectedPad
 ```
 
-These map to the in-game menu entries and are **all clamped** — see above.
-Tested: raising them beyond the menu maximum does not stick.
+These live in `<game>\ACBrotherhoodMP.ini`, **not** in the Saved Games file —
+see above. They map to the multiplayer options menu, which offers three steps,
+and whether they clamp at 2 has not been tested.
 
 ### `[Input]` / `[Player]` / `[Startup]`
 
@@ -124,8 +174,22 @@ gamemode     startupmission        missionroot         mapmenu
 onlineKey    onlinePassword        onlineUser          userindex
 ```
 
-A nearby value vocabulary suggests the accepted arguments:
-`off | force | default | normal | full | none`
+The value vocabulary sits just before the table, at `.rdata` offset 30221980:
+
+```
+off  on  force  default  normal  full        <- general
+8x  6x  4x  2x  none                         <- msaa only
+```
+
+The MSAA half is confirmed by the enum `Multisample_8x` .. `Multisample_None`
+alongside `DisplayOptions::MultisampleType`. So **`/msaa:full` is not a value the
+game accepts** — the launcher passed it and it did nothing. `/msaa:8x` is the
+switch.
+
+`/lightmode` is worth avoiding entirely: `DisplayOptions::LightingMode`
+enumerates `NormalLighting | DefaultLight | FullBright`, so `full` most likely
+selects FullBright — a flat debug view with the lighting removed. The launcher no
+longer passes it.
 
 No `windowed` or `borderless` switch exists — hence the launcher applying the
 window style via Win32 after launch instead.
@@ -539,6 +603,38 @@ The Barber is **persona ID15**, deduced from resource adjacency
 `229 BarberBottom_Set`, `231 AC2MP_ID15_UPCustom_Set`). His weapon is a
 separate resource, so recolouring the outfit atlas cannot affect it.
 
+## The game refuses a second instance (tested)
+
+Bots have to be players, so the whole bot approach assumed two clients could run
+on one machine. **They cannot.**
+
+Tested directly: one instance launches fine and is genuinely live (pid, ~500 MB
+working set, real window handle titled "Assassin's Creed Brotherhood"). A second
+instance launched while the first was up **exited with code 0** — a clean,
+deliberate exit, not a crash or a resource failure.
+
+`ACBMP.exe` imports `CreateMutexA` and neither `OpenMutex` variant, which is the
+signature of the standard guard: create a named mutex, check for
+`ERROR_ALREADY_EXISTS`, exit if found. The name is not a plain string in the
+binary.
+
+**Consequences.** `tools/warm-body.ps1` works as far as it can be tested — it
+provisions accounts, launches a client with `/onlineUser` and `/onlinePassword`,
+and drives it — but it can only ever run **one** bot per Windows session. The
+routes to more than one, roughly in order of effort:
+
+| route | notes |
+|---|---|
+| Second machine | Definitely works. Needs a second copy of the game. |
+| Sandboxie or similar | Isolates the object namespace; the usual answer for this. |
+| Second Windows user session | A `Local\` mutex is per-session, so this should work without extra software. |
+| Close the mutex handle | Enumerate handles in the running process and close the mutant. Works, but needs a handle tool or a `NtQuerySystemInformation` walker. |
+| VM | Heaviest, most reliable isolation. |
+
+None of these is blocked by anything technical we have found; they are all
+effort and setup. Nothing here involves DRM — this is a convenience guard on a
+game the user owns, being used against their own private server.
+
 ## What this does *not* get you
 
 Adding new UI (a colour picker), new abilities, or new gameplay behaviour still
@@ -549,7 +645,10 @@ touching the binary at all.
 ## Suggested next steps
 
 1. ~~Locate the written INI~~ — **done**, see above.
-2. ~~Try quality keys above the menu maximum~~ — **done, they clamp.**
+2. ~~Try quality keys above the menu maximum~~ — **done for singleplayer, they
+   clamp. Not done for multiplayer**, whose keys live in a different file that
+   was missed; `tools/acb-graphics.ps1 -Set Beyond` then `-Verify` settles it.
+   This is the cheapest remaining fidelity question.
 3. Inspect `multi\DefaultBindings.map` — it exists and is only 17 KB. Combined
    with the editable `[Keyboard*]` sections, this is the open surface for
    remapping.
