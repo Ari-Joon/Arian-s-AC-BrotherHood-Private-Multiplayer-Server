@@ -179,6 +179,7 @@ python tools/recolour_texture.py --texture "<path>\1_-_BarberUp_DiffuseMap.Textu
 | `--strength` | `0.0`–`1.0`, blend towards the scheme |
 | `--grid` | Render a labelled `A1..H8` overlay of the atlas |
 | `--keep` | Hold cells (`G2,H2`) or rects (`x0:y0:x1:y1`) at original colours |
+| `--max-saturation` | Only recolour blocks duller than N, so leather, wood and metal keep their own colour |
 | `--levels` | Force one tonal range across every texture of an outfit so the halves match |
 | `--dry-run` | Preview only, write nothing |
 | `--restore` | Put the backup back |
@@ -186,6 +187,11 @@ python tools/recolour_texture.py --texture "<path>\1_-_BarberUp_DiffuseMap.Textu
 Character textures are **atlases** — clothing, straps, boots and props share one
 sheet. Use `--grid` to see the layout, then `--keep` to protect anything that
 should stay its original colour.
+
+`--max-saturation` is usually the better tool for that. Cloth is close to grey
+while leather, wood and metal are strongly coloured, so a single threshold
+(around `25`) recolours the garment and leaves its fittings alone — no region
+picking, and it transfers to any persona.
 
 Afterwards repack in AnvilToolkit, inner `.data` first, then the `.forge`, with
 the game closed.

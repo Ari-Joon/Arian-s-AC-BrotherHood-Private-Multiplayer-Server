@@ -245,10 +245,31 @@ def parse_keep(spec):
     return rects
 
 
-def recolour(payload, kind, lut, w, h, mips, keep=()):
-    """Transform every block of every mip level. Returns (data, stats)."""
+_SATLUT = None
+
+
+def sat_lut():
+    """Saturation (max channel minus min channel, 0..255) of every RGB565."""
+    global _SATLUT
+    if _SATLUT is None:
+        _SATLUT = [0] * 65536
+        for v in range(65536):
+            r, g, b = dec565(v)
+            _SATLUT[v] = max(r, g, b) - min(r, g, b)
+    return _SATLUT
+
+
+def recolour(payload, kind, lut, w, h, mips, keep=(), sat_max=None):
+    """Transform every block of every mip level. Returns (data, stats).
+
+    sat_max leaves already-colourful blocks alone. On a character atlas the
+    cloth is near-grey and the leather, wood and metal are strongly coloured,
+    so one threshold separates the garment from its fittings without having to
+    name regions by hand.
+    """
     data = bytearray(payload)
     step, cbase, ordered = KIND[kind]
+    sl = sat_lut() if sat_max is not None else None
     swaps = flats = kept = done = 0
     for mo, mw, mh, msz in mip_layout(w, h, step, mips):
         bw, bh = max(1, (mw + 3) // 4), max(1, (mh + 3) // 4)
@@ -262,6 +283,11 @@ def recolour(payload, kind, lut, w, h, mips, keep=()):
                     cx = (bx + 0.5) / bw
                     if any(x0 <= cx <= x1 and y0 <= cy <= y1
                            for x0, y0, x1, y1 in keep):
+                        kept += 1
+                        continue
+                if sl is not None:
+                    if (sl[data[off] | (data[off + 1] << 8)] > sat_max or
+                            sl[data[off + 2] | (data[off + 3] << 8)] > sat_max):
                         kept += 1
                         continue
                 done += 1
@@ -449,6 +475,9 @@ def main():
     ap.add_argument("--preview-mip", type=int, default=1)
     ap.add_argument("--grid", help="write a labelled A1..H8 overlay for picking --keep cells")
     ap.add_argument("--keep", default="", help="regions to leave untouched: cells like D1,E1 or rects x0:y0:x1:y1")
+    ap.add_argument("--max-saturation", type=int, default=None, metavar="N",
+                    help="only recolour blocks duller than N (0-255). Keeps leather, "
+                         "wood and metal while recolouring near-grey cloth. Try 40.")
     ap.add_argument("--levels", help="force a tonal range as black:white, e.g. 0.00:0.58. Use the SAME value on every texture of one outfit so the halves match.")
     ap.add_argument("--no-autolevel", action="store_true",
                     help="use the scheme fixed tonal range instead of measuring the texture")
@@ -478,15 +507,16 @@ def main():
               % (len(payload), expect))
 
     # Back up before the first modification, and never overwrite a backup.
-    if a.backup and not a.dry_run:
-        if not os.path.isfile(a.backup):
+    if a.backup:
+        if os.path.isfile(a.backup):
+            # Always work from pristine, so schemes never stack - including in
+            # a dry run, whose whole point is to preview against the original.
+            payload = load(open(a.backup, "rb").read(), a.backup)[1]
+            print("  source: the pristine backup, so schemes do not stack")
+        elif not a.dry_run:
             os.makedirs(os.path.dirname(a.backup), exist_ok=True)
             shutil.copyfile(a.texture, a.backup)
             print("  backup -> %s" % a.backup)
-        else:
-            # Always recolour from pristine, so schemes never stack.
-            payload = load(open(a.backup, "rb").read(), a.backup)[1]
-            print("  (recolouring from the existing backup, so schemes do not stack)")
 
     keep = parse_keep(a.keep)
     if a.grid:
@@ -508,7 +538,7 @@ def main():
         print("  auto-levels: black %.2f  white %.2f (measured, pass --levels %.2f:%.2f "
               "to match other textures)" % (levels + levels))
     lut = build_lut(a.scheme, max(0.0, min(1.0, a.strength)), levels)
-    new, st = recolour(payload, kind, lut, w, h, mips, keep)
+    new, st = recolour(payload, kind, lut, w, h, mips, keep, a.max_saturation)
     print("  scheme '%s' - %s" % (a.scheme, SCHEMES[a.scheme]["desc"]))
     print("  %d blocks: %d recoloured, %d kept original"
           % (st["blocks"], st["changed"], st["kept"]))
