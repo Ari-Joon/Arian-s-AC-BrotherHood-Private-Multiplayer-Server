@@ -129,8 +129,35 @@ powershell -File tools\acb-launcher.ps1 -Display Borderless -Quality High
 powershell -File tools\acb-launcher.ps1 -Display Windowed -Width 1600 -Height 900
 ```
 
-`-Quality High` passes `/shadows:full /postfx:full /msaa:8x`, switches found in
-the game's own argument table.
+`-Quality High` is a preset for `/shadows:full /postfx:full /msaa:8x` plus full
+mip chains. Every switch is also settable on its own, and the settings GUI drives
+them individually:
+
+```
+powershell -File tools\acb-launcher.ps1 -AmbientOcclusion on -FullMips on -Shadows full
+```
+
+| control | switch | measured |
+|---|---|---|
+| Shadows | `/shadows:` | unmeasured |
+| Post-processing | `/postfx:` | unmeasured |
+| Anti-aliasing | `/msaa:` | — |
+| Full mip chains | `/skipmips:off` + character + environment | +108.6 MB |
+| Atlas mipmaps | `/generateatlasmipmaps:on` | +111.5 MB |
+| Ambient occlusion | `/computeao:on /skipao:off` | -110.5 MB |
+| Draw distance | `/fardist:` | -60.9 MB at 10000 |
+
+The last four have **no in-game equivalent at all** — they are what the launcher
+genuinely adds over the options menu. The figures are peak working set against an
+invented control switch on an idle machine, 0.2 MB noise floor. They prove the
+switches do something; **nobody has compared frames**, so none is a verified image
+improvement. They were also measured at the main menu, where far less is
+resident, so treat them as lower bounds on in-game cost.
+
+`TextureQuality`, `EnvironmentQuality`, `CharacterQuality`, `ReflectionQuality`,
+`VSync` and the resolution have **no switch** and exist only as INI keys. The GUI
+shows them as read-only status, because they are all already at their ceilings
+and the game rewrites the file from its own state.
 
 Two of those used to be wrong. The MSAA switch has its own value vocabulary —
 `none | 2x | 4x | 6x | 8x`, matching the `Multisample_8x`..`Multisample_None`

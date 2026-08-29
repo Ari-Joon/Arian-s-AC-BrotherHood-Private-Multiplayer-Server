@@ -2,8 +2,31 @@
   AC Brotherhood - private server launcher with a graphics settings screen.
 
   The game's own options menu is compiled into ACBMP.exe and cannot be extended,
-  so display mode lives here instead. Choices are remembered between runs in
-  settings.json next to this script.
+  so everything the command line can reach lives here instead. Choices are
+  remembered between runs in settings.json next to this script.
+
+  WHY SOME CONTROLS ARE HERE AND OTHERS ARE NOT
+
+  Of the 66 switches registered in ACBMP.exe, these reach graphics: shadows,
+  postfx, msaa, brightness, fullscreen, skipmips, skipmipscharacter,
+  skipmipsenvironment, generateatlasmipmaps, computeao, skipao, deleteao,
+  computeaoforambientgrid, fardist, layersdepthbias, loadondemand,
+  preloadshaders, usestrips, nofogofwar.
+
+  These have NO switch and exist only as INI keys and menu items:
+  TextureQuality, EnvironmentQuality, CharacterQuality, ReflectionQuality,
+  VSync, Resolution. They are shown here as read-only status, because writing
+  them has been tested and the game rewrites the file back to its own values.
+  Every one is already at its ceiling, so there is nothing to gain by trying.
+
+  Four of the controls here have no in-game equivalent at all - full mip chains,
+  atlas mipmaps, ambient occlusion and draw distance. Those are the ones this
+  screen genuinely adds.
+
+  MEASURED, NOT VERIFIED. The memory figures quoted below come from launching
+  with each switch against an invented control switch, on an idle machine, with
+  a 0.2 MB noise floor. They prove the switches DO something. Nobody has
+  compared frames, so none of them is a verified image improvement.
 
   MUST be run with -STA:
       powershell -STA -File tools\acb-settings.ps1
@@ -23,6 +46,7 @@ $server   = Join-Path $root "ACB RDV\bin\x86\Release"
 $db       = Join-Path $server "database.sqlite"
 $launcher = Join-Path $PSScriptRoot "acb-launcher.ps1"
 $cfgPath  = Join-Path $PSScriptRoot "settings.json"
+$savedIni = Join-Path $env:USERPROFILE "Saved Games\Assassin's Creed Brotherhood\ACBrotherhood.ini"
 
 # --- palette -----------------------------------------------------------------
 $cBg       = [Drawing.Color]::FromArgb(22, 22, 26)
@@ -41,7 +65,12 @@ $fSmall = New-Object Drawing.Font("Segoe UI", 8.25)
 $fBtn   = New-Object Drawing.Font("Segoe UI Semibold", 12)
 
 # --- saved preferences -------------------------------------------------------
-$cfg = @{ Display = 'Borderless'; Quality = 'High'; Resolution = ''; User = '' }
+$cfg = @{
+    Display = 'Borderless'; Resolution = ''; User = ''
+    Shadows = 'default'; PostFX = 'default'; MSAA = 'default'
+    FullMips = 'default'; AtlasMips = 'default'; AmbientOcclusion = 'default'
+    FarDist = 0
+}
 if (Test-Path $cfgPath) {
     try {
         (Get-Content $cfgPath -Raw | ConvertFrom-Json).PSObject.Properties |
@@ -80,10 +109,32 @@ foreach ($r in $standard) {
     }
 }
 
+# --- what the game's own settings currently are ------------------------------
+# Read-only on purpose. Every one of these is already at its measured ceiling
+# and the game rewrites the file from its own state, so a control here would be
+# a control that silently does nothing.
+$CEILINGS = [ordered]@{
+    TextureQuality = 2; EnvironmentQuality = 5; ShadowQuality = 4
+    ReflectionQuality = 3; CharacterQuality = 4; PostFX = 1
+}
+function Get-IniGraphics {
+    $map = [ordered]@{}
+    if (-not (Test-Path $savedIni)) { return $map }
+    $inGraphics = $false
+    foreach ($line in [System.IO.File]::ReadAllLines($savedIni)) {
+        if ($line -match '^\s*\[(.+?)\]\s*$') { $inGraphics = ($Matches[1] -eq 'Graphics'); continue }
+        if ($inGraphics -and $line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
+            $map[$Matches[1]] = $Matches[2]
+        }
+    }
+    return $map
+}
+$ini = Get-IniGraphics
+
 # --- form --------------------------------------------------------------------
 $form                 = New-Object Windows.Forms.Form
 $form.Text            = "Assassin's Creed Brotherhood"
-$form.ClientSize      = New-Object Drawing.Size(470, 548)
+$form.ClientSize      = New-Object Drawing.Size(470, 900)
 $form.StartPosition   = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox     = $false
@@ -120,22 +171,36 @@ function Style-Combo($c) {
     $c.Font          = $fBody
 }
 
+# One labelled dropdown row, with a short note to the right of the label.
+function Add-Row($label, $note, $y, $values, $current) {
+    [void](Add-Text $label 34 ($y + 4) $fBody $cText)
+    if ($note) { [void](Add-Text $note 34 ($y + 22) $fSmall $cMuted) }
+    $c = New-Object Windows.Forms.ComboBox
+    $c.Location = New-Object Drawing.Point(268, $y)
+    $c.Size = New-Object Drawing.Size(168, 28)
+    Style-Combo $c
+    foreach ($v in $values) { [void]$c.Items.Add($v) }
+    $c.SelectedItem = $(if ($current -and $c.Items.Contains($current)) { $current } else { $values[0] })
+    $form.Controls.Add($c)
+    return $c
+}
+
 # --- header ------------------------------------------------------------------
 [void](Add-Text "BROTHERHOOD"               30 22 $fH1  $cText)
 [void](Add-Text "Private multiplayer server" 32 58 $fSub $cMuted)
 Add-Rule 30 92 410
 
-# --- graphics ----------------------------------------------------------------
-[void](Add-Text "GRAPHICS" 30 110 $fHead $cAccent)
+# --- display -----------------------------------------------------------------
+[void](Add-Text "DISPLAY" 30 108 $fHead $cAccent)
 
-[void](Add-Text "Display mode" 30 142 $fBody $cMuted)
+[void](Add-Text "Window mode" 30 136 $fBody $cMuted)
 $modes  = @('Fullscreen','Borderless','Windowed')
 $radios = @{}
 $x = 34
 foreach ($m in $modes) {
     $r = New-Object Windows.Forms.RadioButton
     $r.Text = $m
-    $r.Location = New-Object Drawing.Point($x, 168)
+    $r.Location = New-Object Drawing.Point($x, 160)
     $r.AutoSize = $true
     $r.Font = $fBody
     $r.ForeColor = $cText
@@ -146,9 +211,9 @@ foreach ($m in $modes) {
     $x += 140
 }
 
-$resLabel = Add-Text "Resolution" 30 210 $fBody $cMuted
+$resLabel = Add-Text "Resolution" 30 194 $fBody $cMuted
 $resBox = New-Object Windows.Forms.ComboBox
-$resBox.Location = New-Object Drawing.Point(34, 234)
+$resBox.Location = New-Object Drawing.Point(34, 218)
 $resBox.Size = New-Object Drawing.Size(260, 28)
 Style-Combo $resBox
 foreach ($r in $resList) { [void]$resBox.Items.Add($r) }
@@ -157,35 +222,45 @@ if ($cfg.Resolution -and $resBox.Items.Contains($cfg.Resolution)) {
 } else { $resBox.SelectedIndex = 0 }
 $form.Controls.Add($resBox)
 
-[void](Add-Text "Visual quality" 30 278 $fBody $cMuted)
-$qBox = New-Object Windows.Forms.ComboBox
-$qBox.Location = New-Object Drawing.Point(34, 302)
-$qBox.Size = New-Object Drawing.Size(260, 28)
-Style-Combo $qBox
-[void]$qBox.Items.Add('Default')
-[void]$qBox.Items.Add('High')
-$qBox.SelectedItem = $(if ($cfg.Quality) { $cfg.Quality } else { 'High' })
-$form.Controls.Add($qBox)
+Add-Rule 30 256 410
 
-[void](Add-Text "High passes /shadows:full /postfx:full /msaa:8x" 34 336 $fSmall $cMuted)
+# --- image quality -----------------------------------------------------------
+[void](Add-Text "IMAGE QUALITY" 30 272 $fHead $cAccent)
+[void](Add-Text "Passed on the command line. 'default' leaves the switch off entirely." 32 292 $fSmall $cMuted)
 
-$syncRes = {
-    $on = $radios['Windowed'].Checked
-    $resBox.Enabled   = $on
-    $resBox.ForeColor = $(if ($on) { $cText } else { $cMuted })
-    $resLabel.Text    = $(if ($on) { "Resolution" } else { "Resolution  -  windowed only" })
+$shadowBox = Add-Row "Shadows"          "unmeasured"                 316 @('default','off','normal','full')        $cfg.Shadows
+$postBox   = Add-Row "Post-processing"  "unmeasured"                 364 @('default','off','normal','full')        $cfg.PostFX
+$msaaBox   = Add-Row "Anti-aliasing"    "MSAA level"                 412 @('default','none','2x','4x','6x','8x')   $cfg.MSAA
+$mipsBox   = Add-Row "Full mip chains"  "+109 MB - no in-game equivalent"  460 @('default','on','off')             $cfg.FullMips
+$atlasBox  = Add-Row "Atlas mipmaps"    "+111 MB - likely the same effect" 508 @('default','on','off')             $cfg.AtlasMips
+$aoBox     = Add-Row "Ambient occlusion" "contact shadowing - no in-game equivalent" 556 @('default','on','off')   $cfg.AmbientOcclusion
+$farBox    = Add-Row "Draw distance"    "no in-game equivalent"      604 @('default','5000','10000','20000')       $(if ($cfg.FarDist -gt 0) { "$($cfg.FarDist)" } else { 'default' })
+
+Add-Rule 30 648 410
+
+# --- what the game itself is set to ------------------------------------------
+[void](Add-Text "IN-GAME SETTINGS" 30 664 $fHead $cAccent)
+$iniBits = @()
+foreach ($k in $CEILINGS.Keys) {
+    if ($ini.Contains($k)) {
+        $at = if ("$($ini[$k])" -eq "$($CEILINGS[$k])") { '' } else { " (ceiling $($CEILINGS[$k]))" }
+        $iniBits += "$k $($ini[$k])$at"
+    }
 }
-foreach ($m in $modes) { $radios[$m].Add_CheckedChanged($syncRes) }
-& $syncRes
+if ($iniBits.Count) {
+    [void](Add-Text (($iniBits -join '   ') -replace '(.{62}\S*)\s', "`$1`n") 32 686 $fSmall $cMuted)
+    [void](Add-Text "Read-only. These have no command-line switch, and the game rewrites`nthem from its own state - all six are already at their ceiling." 32 722 $fSmall $cMuted)
+} else {
+    [void](Add-Text "No [Graphics] section found - launch the game once." 32 686 $fSmall $cMuted)
+}
 
-Add-Rule 30 366 410
+Add-Rule 30 756 410
 
 # --- account -----------------------------------------------------------------
-[void](Add-Text "ACCOUNT" 30 384 $fHead $cAccent)
-[void](Add-Text "The name other players see in-game" 30 412 $fBody $cMuted)
+[void](Add-Text "ACCOUNT" 30 772 $fHead $cAccent)
 
 $uBox = New-Object Windows.Forms.ComboBox
-$uBox.Location = New-Object Drawing.Point(34, 438)
+$uBox.Location = New-Object Drawing.Point(34, 796)
 $uBox.Size = New-Object Drawing.Size(260, 28)
 Style-Combo $uBox
 foreach ($a in $accounts) { [void]$uBox.Items.Add($a) }
@@ -239,7 +314,7 @@ function Show-NamePrompt($current) {
 
 $renameBtn = New-Object Windows.Forms.Button
 $renameBtn.Text = "Rename"
-$renameBtn.Location = New-Object Drawing.Point(308, 437)
+$renameBtn.Location = New-Object Drawing.Point(308, 795)
 $renameBtn.Size = New-Object Drawing.Size(132, 30)
 $renameBtn.Font = $fBody
 $renameBtn.FlatStyle = 'Flat'
@@ -274,10 +349,20 @@ $renameBtn.Add_Click({
     $uBox.SelectedItem = $new
 })
 
+# --- resolution only applies to windowed -------------------------------------
+$syncRes = {
+    $on = $radios['Windowed'].Checked
+    $resBox.Enabled   = $on
+    $resBox.ForeColor = $(if ($on) { $cText } else { $cMuted })
+    $resLabel.Text    = $(if ($on) { "Resolution" } else { "Resolution  -  windowed only" })
+}
+foreach ($m in $modes) { $radios[$m].Add_CheckedChanged($syncRes) }
+& $syncRes
+
 # --- play --------------------------------------------------------------------
 $btn = New-Object Windows.Forms.Button
 $btn.Text = "PLAY"
-$btn.Location = New-Object Drawing.Point(30, 492)
+$btn.Location = New-Object Drawing.Point(30, 840)
 $btn.Size = New-Object Drawing.Size(410, 46)
 $btn.Font = $fBtn
 $btn.FlatStyle = 'Flat'
@@ -293,16 +378,30 @@ $btn.Add_MouseLeave({ $btn.BackColor = $cAccent })
 
 $btn.Add_Click({
     $mode = @($modes | Where-Object { $radios[$_].Checked })[0]
+    $far  = $(if ([string]$farBox.SelectedItem -eq 'default') { 0 } else { [int]$farBox.SelectedItem })
 
     @{
-        Display    = $mode
-        Quality    = $qBox.SelectedItem
-        Resolution = $resBox.SelectedItem
-        User       = $uBox.SelectedItem
+        Display          = $mode
+        Resolution       = $resBox.SelectedItem
+        User             = $uBox.SelectedItem
+        Shadows          = $shadowBox.SelectedItem
+        PostFX           = $postBox.SelectedItem
+        MSAA             = $msaaBox.SelectedItem
+        FullMips         = $mipsBox.SelectedItem
+        AtlasMips        = $atlasBox.SelectedItem
+        AmbientOcclusion = $aoBox.SelectedItem
+        FarDist          = $far
     } | ConvertTo-Json | Set-Content -Path $cfgPath -Encoding utf8
 
     $a = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$launcher`"",
-           '-Display', $mode, '-Quality', $qBox.SelectedItem, '-User', $uBox.SelectedItem)
+           '-Display', $mode, '-User', $uBox.SelectedItem,
+           '-Shadows', $shadowBox.SelectedItem,
+           '-PostFX', $postBox.SelectedItem,
+           '-MSAA', $msaaBox.SelectedItem,
+           '-FullMips', $mipsBox.SelectedItem,
+           '-AtlasMips', $atlasBox.SelectedItem,
+           '-AmbientOcclusion', $aoBox.SelectedItem)
+    if ($far -gt 0) { $a += @('-FarDist', "$far") }
 
     if ($mode -eq 'Windowed') {
         # Entries look like "1600 x 900" or "2560 x 1600  (native)".

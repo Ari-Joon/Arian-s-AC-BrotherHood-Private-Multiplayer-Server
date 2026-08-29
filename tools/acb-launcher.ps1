@@ -10,6 +10,7 @@
     .\tools\acb-launcher.ps1 -Display Borderless
     .\tools\acb-launcher.ps1 -Display Windowed -Width 1600 -Height 900
     .\tools\acb-launcher.ps1 -Quality High -Display Borderless
+    .\tools\acb-launcher.ps1 -AmbientOcclusion on -FullMips on -Shadows full
 #>
 param(
     [ValidateSet('Fullscreen','Borderless','Windowed')] [string]$Display = 'Fullscreen',
@@ -17,7 +18,17 @@ param(
     [int]$Width  = 0,
     [int]$Height = 0,
     [string]$User,
-    [string]$Password
+    [string]$Password,
+
+    # Individual switches. Each overrides whatever -Quality would have set, so
+    # the GUI can drive them one at a time. 'default' means "do not pass it".
+    [ValidateSet('default','off','on','normal','full')] [string]$Shadows = 'default',
+    [ValidateSet('default','off','on','normal','full')] [string]$PostFX  = 'default',
+    [ValidateSet('default','none','2x','4x','6x','8x')] [string]$MSAA    = 'default',
+    [ValidateSet('default','on','off')] [string]$FullMips  = 'default',
+    [ValidateSet('default','on','off')] [string]$AtlasMips = 'default',
+    [ValidateSet('default','on','off')] [string]$AmbientOcclusion = 'default',
+    [int]$FarDist = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,31 +84,64 @@ if (Test-Path $ds4) {
 
 # --- build the client command line ------------------------------------------
 $argv = @("/onlineUser:$User", "/onlinePassword:$Password")
+
+# -Quality High is a preset over the individual switches below; anything set
+# explicitly wins over it.
 if ($Quality -eq 'High') {
-    # Switch names AND their value vocabulary read out of ACBMP.exe's own tables.
-    # The general vocabulary is  off | on | force | default | normal | full.
-    #
-    # msaa has a SEPARATE one - none | 2x | 4x | 6x | 8x - matching the
-    # Multisample_8x .. Multisample_None enum in the binary. "/msaa:full" is not
-    # a value the game accepts, so it was doing nothing.
-    $argv += @("/shadows:full", "/postfx:full", "/msaa:8x")
-
-    # Keep the full mip chain. The default drops mips: measured against a bogus
-    # control switch (noise floor 0.2 MB), these three add ~109 MB of resident
-    # texture data. That is evidence the switches DO something, not evidence
-    # that the image looks better - nobody has compared frames yet.
-    $argv += @("/skipmips:off", "/skipmipscharacter:off", "/skipmipsenvironment:off")
-
-    # /lightmode is deliberately NOT passed. DisplayOptions::LightingMode
-    # enumerates NormalLighting | DefaultLight | FullBright, so "/lightmode:full"
-    # most likely selects FullBright - a flat debug view with the lighting taken
-    # out. That is a fidelity loss, not a gain.
-    #
-    # /generateatlasmipmaps:on measures ~111 MB, close enough to the skipmips
-    # figure that it is probably the same effect counted twice. Left out until
-    # someone separates them.
+    if ($Shadows  -eq 'default') { $Shadows  = 'full' }
+    if ($PostFX   -eq 'default') { $PostFX   = 'full' }
+    if ($MSAA     -eq 'default') { $MSAA     = '8x'   }
+    if ($FullMips -eq 'default') { $FullMips = 'on'   }
 }
-Write-Host "Launching as $User ($Display, $Quality quality)" -ForegroundColor Cyan
+
+if ($Shadows -ne 'default') { $argv += "/shadows:$Shadows" }
+if ($PostFX  -ne 'default') { $argv += "/postfx:$PostFX"   }
+if ($MSAA    -ne 'default') { $argv += "/msaa:$MSAA"       }
+
+# "Full mip chains on" means telling the game NOT to skip mips, so the value is
+# inverted against the switch name.
+if ($FullMips -ne 'default') {
+    $skip = if ($FullMips -eq 'on') { 'off' } else { 'on' }
+    $argv += @("/skipmips:$skip", "/skipmipscharacter:$skip", "/skipmipsenvironment:$skip")
+}
+if ($AtlasMips -ne 'default') { $argv += "/generateatlasmipmaps:$AtlasMips" }
+if ($AmbientOcclusion -ne 'default') {
+    $argv += @("/computeao:$AmbientOcclusion",
+               "/skipao:$(if ($AmbientOcclusion -eq 'on') { 'off' } else { 'on' })")
+}
+if ($FarDist -gt 0) { $argv += "/fardist:$FarDist" }
+
+# NOTES ON THE SWITCHES, so nobody re-derives them.
+#
+# The general value vocabulary is off | on | force | default | normal | full.
+# msaa has its OWN - none | 2x | 4x | 6x | 8x - matching the Multisample_8x ..
+# Multisample_None enum. "/msaa:full" is not a value the game accepts and did
+# nothing for as long as it was passed here.
+#
+# /lightmode is deliberately absent and should stay absent.
+# DisplayOptions::LightingMode enumerates NormalLighting | DefaultLight |
+# FullBright, so "full" most likely selects FullBright - a flat debug view with
+# the lighting removed. That is a fidelity loss dressed as a gain.
+#
+# Memory measured against an invented control switch, 0.2 MB noise floor:
+#   full mip chains       +108.6 MB
+#   atlas mipmaps         +111.5 MB   (close enough to be the same effect twice)
+#   ambient occlusion     -110.5 MB
+#   /fardist:10000         -60.9 MB
+# That is evidence the switches DO something. It is NOT evidence the image
+# improves - nobody has compared frames. /shadows and /postfx are unmeasured
+# even for residency.
+#
+# CONTENTION: /shadows here and ShadowQuality in the INI both drive shadows and
+# it is not established which wins. If you are testing an INI key, pass
+# -Quality Default and leave -Shadows alone, or the result is unreadable.
+$switches = @($argv | Where-Object { $_ -notlike '/online*' })
+Write-Host "Launching as $User ($Display)" -ForegroundColor Cyan
+if ($switches.Count) {
+    Write-Host "  switches: $($switches -join ' ')" -ForegroundColor DarkGray
+} else {
+    Write-Host "  no graphics switches - the game uses its own defaults" -ForegroundColor DarkGray
+}
 Start-Process -FilePath "$game\ACBMP.exe" -WorkingDirectory $game -ArgumentList $argv
 
 # --- apply the window style --------------------------------------------------
