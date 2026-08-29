@@ -29,7 +29,7 @@
 //
 // USAGE
 //   dotnet run --project tools/release-guard -- <pid>                 list
-//   dotnet run --project tools/release-guard -- <pid> --close scimitar  release
+//   dotnet run --project tools/release-guard -- <pid> --close scimitar_semaphore
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -131,8 +131,13 @@ class Program
                 string name = Query(dup, ObjectNameInformation);
                 if (string.IsNullOrEmpty(name)) continue;
                 seen++;
+                // Match the object NAME exactly, not as a substring. The engine
+                // names many objects scimitar_*, and a substring match released
+                // 49 of them on one client instead of the single guard - which
+                // risks destabilising the process it is meant to leave running.
+                string leaf = name.Substring(name.LastIndexOf('\\') + 1);
                 bool hit = match != null &&
-                           name.IndexOf(match, StringComparison.OrdinalIgnoreCase) >= 0;
+                           leaf.Equals(match, StringComparison.OrdinalIgnoreCase);
                 if (!quiet || hit)
                     Console.WriteLine($"  {type,-10} {name}{(hit ? "   <-- releasing" : "")}");
                 if (hit)
