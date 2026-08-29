@@ -239,6 +239,32 @@ range, same block statistics.
 swizzle, in `DataPC.forge` as well as `DataPC_extra.forge`. They can be edited
 in place and repacked, with no DDS round-trip and no import step.
 
+## The `.data` container is compressed (unsolved)
+
+Editing a texture needs it unpacked out of its `.data` first, and that step
+still requires AnvilToolkit. The container is genuinely compressed — the
+uncompressed `TextureMap` does not appear anywhere inside it (`228`'s `.data`
+is 1,327,182 bytes against 1,573,438 bytes of resources, ~84%).
+
+What is known:
+
+- `33 aa fb 57` appears as a magic at offsets 4 and 67, followed both times by
+  the same 8 bytes `99 fa 04 10 01 00 02 00`.
+- A table of `00 80 xx xx` pairs begins around offset 80.
+- The first block is 49 bytes and contains readable text — `BarberUp_ Set `
+  plus what look like resource IDs — so it is a **name/index table**, not
+  payload. That rules out the reading of `0x8000` as an uncompressed chunk
+  size, which was the obvious first guess and is wrong.
+- AnvilToolkit ships **`K4os.Compression.LZ4`**, `EasyCompressor.LZMA` and
+  `LZMA-SDK`, so the codec is one of those. Plain LZ4 block decoding fails at
+  every table and data offset swept.
+- Literal runs survive visibly in the compressed bytes (`Diffu seMap`, with a
+  control byte every ~8 characters), which is an LZ77-family signature and
+  argues against LZMA for that region.
+
+Anyone continuing should start from the 49-byte index block, since it is small
+and its plaintext is partly known.
+
 ## Recolouring personas
 
 `tools/recolour_texture.py` recolours a texture by transforming only the two
