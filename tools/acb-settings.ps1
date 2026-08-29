@@ -151,7 +151,11 @@ $ini = Get-IniGraphics
 # --- form --------------------------------------------------------------------
 $form                 = New-Object Windows.Forms.Form
 $form.Text            = "Assassin's Creed Brotherhood"
-$form.ClientSize      = New-Object Drawing.Size(470, 900)
+# Tall enough for every section, but never taller than the screen: on a
+# 1080p display the full 1060 would put the PLAY button under the taskbar.
+$wantH = 1060
+$availH = [int]([Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 60)
+$form.ClientSize      = New-Object Drawing.Size(470, ([Math]::Min($wantH, $availH)))
 $form.StartPosition   = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox     = $false
@@ -369,6 +373,54 @@ $renameBtn.Add_Click({
     $uBox.SelectedItem = $new
 })
 
+# --- match rules -------------------------------------------------------------
+# These do NOT change the game's files. They change the gamesettings the SERVER
+# hands to clients: QuazalWV's PersistentStoreService reads
+# gamesettings_c1380_d873_s6285.cxb on every request, so whatever is set here
+# applies to everyone who joins, and nobody else installs anything.
+#
+# "default" means the values the game shipped with, restored from a pristine
+# backup rather than scaled back up - so nothing drifts after repeated changes.
+Add-Rule 30 838 410
+[void](Add-Text "MATCH RULES" 30 854 $fHead $cAccent)
+[void](Add-Text "Applied by the host. Everyone who joins plays by these." 32 874 $fSmall $cMuted)
+
+$cdBox = Add-Row "Ability cooldowns" "lower recharges faster" 902 @('default','0.75x','0.5x','0.25x','0.1x') $cfg.CooldownScale
+$duBox = Add-Row "Ability durations" "how long an ability lasts" 950 @('default','1.25x','1.5x','2x')       $cfg.DurationScale
+
+$resetBtn = New-Object Windows.Forms.Button
+$resetBtn.Text = "Reset to defaults"
+$resetBtn.Location = New-Object Drawing.Point(268, 850)
+$resetBtn.Size = New-Object Drawing.Size(172, 30)
+$resetBtn.Font = $fBody
+$resetBtn.FlatStyle = 'Flat'
+$resetBtn.BackColor = $cPanel
+$resetBtn.ForeColor = $cText
+$resetBtn.FlatAppearance.BorderColor = [Drawing.Color]::FromArgb(74, 74, 86)
+$resetBtn.FlatAppearance.BorderSize = 1
+$resetBtn.Cursor = 'Hand'
+$form.Controls.Add($resetBtn)
+
+$resetBtn.Add_Click({
+    # Restores the shipped file byte for byte from the backup. Takes a few
+    # seconds because it shells out to the launcher, so show it is working.
+    $form.Cursor = 'WaitCursor'
+    $resetBtn.Enabled = $false
+    try {
+        $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $launcher -RulesOnly -ResetRules 2>&1
+        $cdBox.SelectedItem = 'default'
+        $duBox.SelectedItem = 'default'
+        [void][Windows.Forms.MessageBox]::Show(
+            "Ability rules are back to the values the game shipped with.",
+            "Reset to defaults", 'OK', 'Information')
+    }
+    catch {
+        [void][Windows.Forms.MessageBox]::Show("Could not reset the rules:`n$_",
+            "Reset failed", 'OK', 'Warning')
+    }
+    finally { $resetBtn.Enabled = $true; $form.Cursor = 'Default' }
+})
+
 # --- resolution only applies to windowed -------------------------------------
 $syncRes = {
     $on = $radios['Windowed'].Checked
@@ -380,9 +432,19 @@ foreach ($m in $modes) { $radios[$m].Add_CheckedChanged($syncRes) }
 & $syncRes
 
 # --- play --------------------------------------------------------------------
+# PLAY lives in a strip docked to the bottom rather than in the scrolling
+# flow. With the match rules section added the content is taller than a 1080p
+# working area, and the one control nobody should have to scroll to find is
+# this one.
+$bottom = New-Object Windows.Forms.Panel
+$bottom.Dock = 'Bottom'
+$bottom.Height = 60
+$bottom.BackColor = $cBg
+$form.Controls.Add($bottom)
+
 $btn = New-Object Windows.Forms.Button
 $btn.Text = "PLAY"
-$btn.Location = New-Object Drawing.Point(30, 840)
+$btn.Location = New-Object Drawing.Point(30, 7)
 $btn.Size = New-Object Drawing.Size(410, 46)
 $btn.Font = $fBtn
 $btn.FlatStyle = 'Flat'
@@ -390,7 +452,7 @@ $btn.BackColor = $cAccent
 $btn.ForeColor = [Drawing.Color]::White
 $btn.FlatAppearance.BorderSize = 0
 $btn.Cursor = 'Hand'
-$form.Controls.Add($btn)
+$bottom.Controls.Add($btn)
 $form.AcceptButton = $btn
 
 $btn.Add_MouseEnter({ $btn.BackColor = $cAccentHi })
@@ -411,6 +473,8 @@ $btn.Add_Click({
         AtlasMips        = $atlasBox.SelectedItem
         AmbientOcclusion = $aoBox.SelectedItem
         FarDist          = $far
+        CooldownScale    = $cdBox.SelectedItem
+        DurationScale    = $duBox.SelectedItem
     } | ConvertTo-Json | Set-Content -Path $cfgPath -Encoding utf8
 
     $a = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$launcher`"",
@@ -423,6 +487,16 @@ $btn.Add_Click({
            '-AmbientOcclusion', $aoBox.SelectedItem)
     if ($far -gt 0) { $a += @('-FarDist', "$far") }
 
+    # Rules rebuild from the pristine backup every time, so "default" on
+    # both means reset rather than scale-by-one.
+    $cdSel = [string]$cdBox.SelectedItem
+    $duSel = [string]$duBox.SelectedItem
+    if ($cdSel -eq 'default' -and $duSel -eq 'default') { $a += '-ResetRules' }
+    else {
+        if ($cdSel -ne 'default') { $a += @('-CooldownScale', $cdSel.TrimEnd('x')) }
+        if ($duSel -ne 'default') { $a += @('-DurationScale', $duSel.TrimEnd('x')) }
+    }
+
     if ($mode -eq 'Windowed') {
         # Entries look like "1600 x 900" or "2560 x 1600  (native)".
         $m = [regex]::Match([string]$resBox.SelectedItem, '(\d+)\s*x\s*(\d+)')
@@ -432,5 +506,21 @@ $btn.Add_Click({
     Start-Process powershell -ArgumentList $a -WindowStyle Hidden
     $form.Close()
 })
+
+# --- make the content scroll, keeping PLAY pinned ---------------------------
+# Everything above is positioned absolutely on $form. Move it all into a
+# scrolling panel that fills the space above the PLAY strip, so the window
+# works on a screen shorter than the content without hiding the one button
+# that matters. Done here, at the end, so the layout code above stays plain.
+$scroll = New-Object Windows.Forms.Panel
+$scroll.Dock = 'Fill'
+$scroll.AutoScroll = $true
+$scroll.BackColor = $cBg
+foreach ($c in @($form.Controls | Where-Object { $_ -ne $bottom })) {
+    $form.Controls.Remove($c)
+    $scroll.Controls.Add($c)
+}
+# Added last so Fill takes the space the docked strip leaves.
+$form.Controls.Add($scroll)
 
 [void]$form.ShowDialog()
