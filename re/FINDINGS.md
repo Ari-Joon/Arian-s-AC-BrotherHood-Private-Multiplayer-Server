@@ -421,6 +421,96 @@ range, same block statistics.
 swizzle, in `DataPC.forge` as well as `DataPC_extra.forge`. They can be edited
 in place and repacked, with no DDS round-trip and no import step.
 
+## The single-instance guard, decoded — and why it does not explain what we see
+
+`ACBMP.exe` creates a named semaphore at startup and gives up if it already
+exists. Verified by disassembling the bytes rather than by taking it on report:
+
+```
+file 0x431c   68 20 28 0d 02   push  0x020D2820   ; "scimitar_semaphore"
+              6a 01            push  1            ; lMaximumCount
+              6a 01            push  1            ; lInitialCount
+              6a 00            push  0            ; lpSemaphoreAttributes
+              ff d6            call  esi          ; CreateSemaphoreA
+              ff d7            call  edi          ; GetLastError
+              3d b7 00 00 00   cmp   eax, 0B7h    ; ERROR_ALREADY_EXISTS
+              75 33            jne   ...          ; not present -> carry on
+file 0x4352   41               inc   ecx
+              83 f9 32         cmp   ecx, 32h     ; 50 attempts
+              6a 64            push  100          ; Sleep(100)
+              ff d3            call  ebx
+                               ... and retry CreateSemaphoreA
+```
+
+So: **maximum count 1, initial count 1, fifty retries at 100 ms = a 5 second
+window.** The object lives at `\Sessions\<n>\BaseNamedObjects\scimitar_semaphore`,
+which makes it per-Windows-session rather than machine-wide.
+
+**Why an earlier scan missed it entirely:** the calls here are `ff d6`, `ff d7`,
+`ff d3` — register-indirect, loaded once into `esi`/`edi`/`ebx` beforehand. A
+scan matching only `ff 15 <IAT slot>` direct-indirect calls finds none of them.
+Any conclusion drawn from that style of scan, including the 66-switch handler
+table, should be read as **at least** N rather than exactly N.
+
+**What this does NOT establish.** The obvious reading — one client per Windows
+session — is contradicted by direct observation. Three `ACBMP.exe` processes ran
+simultaneously in **session 1** at 17:35, verified by process ID and session ID,
+and three again at 17:45 with distinct accounts and distinct UDP ports. Under a
+strict maxCount=1 reading that is impossible, and it happened twice, observed by
+two different sessions independently.
+
+So the code is confirmed and its consequence is not. Possibilities nobody has
+tested: the retry succeeds once the first process releases, the give-up path
+continues rather than exits, or the guard is bypassed on a path we have not read.
+Recorded as **unresolved** rather than resolved in either direction — the
+"second instance dies after ~5 s with exit code 0" symptom matches the 5 second
+window exactly, which is suggestive and is not the same as proof.
+
+## Switch residency measurements
+
+Peak working set against an invented control switch, clean run, idle machine.
+Baseline 360.7 MB, so the control establishes a 0.2 MB noise floor:
+
+| case | peak MB | delta |
+|---|---|---|
+| invented control | 360.5 | -0.2 |
+| `/generateatlasmipmaps:on` | 472.2 | **+111.5** |
+| `/skipmips:off` + character + environment | 469.3 | **+108.6** |
+| `/skipmips:force` | 376.8 | +16.1 |
+| `/compresstextures:off` | 361.7 | +1.0 (not established) |
+| `/computeao:on /skipao:off` | 250.2 | -110.5 (direction unexplained) |
+| `/fardist:10000` | 299.8 | -60.9 (direction unexplained) |
+
+**Two caveats that must travel with these numbers.** They were taken **at the main
+menu**, where far less is resident — in-game working sets observed the same day
+were 453, 698 and 803 MB — so they are lower bounds on in-game cost rather than
+estimates of it. And residency is not pixels: this proves the switches *do*
+something, not that anything looks better. Nobody has compared frames.
+
+`/shadows` and `/postfx` remain unmeasured even for residency, and the launcher
+ships them.
+
+## A pattern worth naming, because it caught six separate things
+
+Every significant error today had the same shape: **an operation produced its
+visible half and skipped its state half, and the visible half looked like
+success.**
+
+- A forge grew by 65.7 MB with no content change — file changed, nothing gained.
+- A container repack printed `ok` while writing nothing.
+- A forge extraction printed `Finished unpacking` into an empty directory.
+- `AcceptInvitation` notified the host and never joined the session, so the lobby
+  listed a player the server did not have.
+- `GetInvitationsReceived` built a response and never queried the database.
+- A working-set sampler returned 480 MB, a clean number from a loading screen.
+
+In every case the check that caught it compared *content* against expectation
+rather than reading a status. "It reported success", "the file changed", "the
+process was running" and "the timestamp moved" are all the weak form. The strong
+form is arithmetic: does the size delta match the content delta, does the value
+on disk match the value armed, is the peak in the range gameplay actually
+produces.
+
 ## Save files: where challenge progress must live, and why it is still shut
 
 **Everything outside the container is ruled out.** Swept and verified empty:
