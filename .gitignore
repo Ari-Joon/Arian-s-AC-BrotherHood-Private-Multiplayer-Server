@@ -58,3 +58,6 @@ tools/settings.json
 
 # Third-party tooling, not part of this project
 AnvilKit/
+
+# Third-party tooling, not part of this project
+DS4Windows/

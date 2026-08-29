@@ -50,6 +50,27 @@ if (-not (Get-Process ACBRDV -ErrorAction SilentlyContinue)) {
     Write-Host "Server already running." -ForegroundColor DarkGray
 }
 
+# --- controller support ------------------------------------------------------
+# The game reads XInput and enumerates pads ONCE at startup. A DualSense speaks
+# HID/DirectInput, so DS4Windows (+ViGEm) must already be running to present it
+# as a virtual Xbox 360 pad - otherwise the game sees no controller at all.
+$ds4 = Join-Path $root "DS4Windows\DS4Windows\DS4Windows.exe"
+if (Test-Path $ds4) {
+    if (-not (Get-Process DS4Windows -ErrorAction SilentlyContinue)) {
+        Write-Host "Starting DS4Windows for controller support..." -ForegroundColor Cyan
+        Start-Process -FilePath $ds4 -WorkingDirectory (Split-Path $ds4)
+        # Give it time to create the virtual pad before the game enumerates.
+        foreach ($i in 1..20) {
+            Start-Sleep -Milliseconds 500
+            $x = Get-PnpDevice -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Present -and $_.FriendlyName -match "Xbox 360 Controller for Windows" }
+            if ($x) { Write-Host "  virtual XInput pad ready." -ForegroundColor DarkGray; break }
+        }
+    } else {
+        Write-Host "DS4Windows already running." -ForegroundColor DarkGray
+    }
+}
+
 # --- build the client command line ------------------------------------------
 $argv = @("/onlineUser:$User", "/onlinePassword:$Password")
 if ($Quality -eq 'High') {
