@@ -113,6 +113,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/glyph-swap.ps1` | Switch the controller diagram between Xbox and PlayStation |
 | `tools/recolour_texture.py` | Recolour a persona or any BC1/BC2 texture, reversibly |
 | `tools/recolour-persona.ps1` | Recolour a whole persona at once, with matching tone |
+| `tools/bot_vm.py` | Behaviour VM for bot players — tiers, patrols, pursuit |
 
 ### Display modes
 
@@ -252,6 +253,53 @@ always 61 bytes, `filesize - payloadsize` always equals `151`, which looks
 exactly like a header length and is not one — reading from there shifts every
 block by 61 bytes. See [re/FINDINGS.md](re/FINDINGS.md) for the full layout and
 the two bugs worth not repeating.
+
+---
+
+## Bots
+
+`bot_vm.py` is a behaviour runtime for bot *players*. Brotherhood's AI is
+compiled into `ACBMP.exe` and matches are peer-to-peer, so nothing can be
+injected — a bot is a client with its own account, driven by synthetic input.
+
+That constraint is also a feature: a bot has no position feed and no entity
+list, so it genuinely cannot cheat. It goes off the face and heading of what is
+on screen, and nothing else.
+
+Behaviour is a small instruction set, the way a mission script walks a character
+to a location — `GOTO`, `WANDER`, `LOOK`, `OBSERVE`, `STALK`, `PURSUE`, `KILL`,
+`BLEND`, `WAIT` — with a program per state. Perception returns contacts carrying
+only bearing, apparent distance, facing and appearance match. Confidence builds
+by watching, and each tier needs a different amount before committing:
+
+| Tier | Commits at | Patience | Sprints | Tells |
+|---|---|---|---|---|
+| `assassin` | 0.82 confidence | 7 ticks observing | rarely — it breaks stealth | 6% |
+| `hunter` | 0.62 | 4 ticks | sometimes | 14% |
+| `brute` | 0.38 | 1 tick | readily | 28% |
+
+That difference is what produces the running and chasing: a brute commits on
+weak evidence and is often wrong, an assassin waits and gets the silent kill.
+Bots are deliberately imperfect — overshooting turns, hesitating, doubling back
+— because a bot that never errs reads as a bot.
+
+```
+python tools/bot_vm.py --simulate --ticks 40 --seed 7
+```
+
+**Status.** Everything above the perception boundary runs against a built-in
+simulated world, so the state machine, tiers, navigation and tells are testable
+without the game. **Perception is not solved** — `ScreenPerception` needs the
+compass and target indicator located in screen space at your resolution and HUD
+scale, and that calibration has not been done. It returns nothing rather than
+guessing, because a bot that hallucinates contacts is worse than one that stands
+still.
+
+The simulated *outcomes* are also not yet trustworthy: across 30 runs all three
+tiers scored near 100% accuracy, because the fake world has no penalty for being
+spotted and no failed-approach path. The tiers differ correctly in behaviour
+(sprint rate 0/1/4%, tell rate 5/14/28%) but the scoring model needs work before
+its kill numbers mean anything.
 
 ---
 
