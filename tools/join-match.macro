@@ -1,0 +1,18 @@
+# Steps from the title screen into a multiplayer match.
+#
+#   <key> <holdMs> <waitMs>
+#
+# NEEDS CALIBRATION. These are a starting point, not a working sequence - the
+# real keypresses cannot be derived without watching the menus, and pretending
+# otherwise would make this look tested when it is not. Run warm-body.ps1 with
+# -DryRun to see the sequence, then fix the steps against what you actually see
+# and time the waits generously; menu transitions here are slow.
+#
+# Keys available: W A S D Space Shift Ctrl E Q F Esc Enter Tab Up Down Left Right
+
+Enter   80  6000    # dismiss the intro / press any key
+Enter   80  4000    # main menu: first entry
+Down    80   600    # move to MULTIPLAYER
+Enter   80  8000    # enter multiplayer, waits on the server handshake
+Enter   80  6000    # first playlist entry
+Enter   80 20000    # confirm and sit in matchmaking

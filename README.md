@@ -114,6 +114,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/recolour_texture.py` | Recolour a persona or any BC1/BC2 texture, reversibly |
 | `tools/recolour-persona.ps1` | Recolour a whole persona at once, with matching tone |
 | `tools/bot_vm.py` | Behaviour VM for bot players — tiers, patrols, pursuit |
+| `tools/warm-body.ps1` | Put bot players in a match so challenges can score |
 | `tools/anvil-unpack/` | Unpack `.data` containers in batch, no GUI |
 | `tools/anvil-inflate/` | Inflate a container chunk — archives, `OPTIONS`, `.SAV` |
 | `tools/anvil-repack/` | Repack `.data` containers and the `.forge`, no GUI |
@@ -344,11 +345,32 @@ and HUD scale has not been done. Everything above that boundary is tested; below
 it, nothing is. A bot that hallucinates contacts is worse than one that stands
 still, so it returns nothing rather than guessing.
 
-**For putting a body in a match, perception may not be needed at all.** Ability
-challenges need another live player present, not a skilled one — the game
-assigns contracts, so a bot that logs in, joins and moves plausibly is enough to
-generate the situations a challenge scores. That is a far lower bar than target
-identification and does not depend on any of the above.
+### Warm bodies — `warm-body.ps1`
+
+**Putting a body in a match needs no perception at all.** Ability challenges
+need another live player present, not a skilled one — the game assigns contracts
+itself, so a bot that logs in, joins and moves is enough to generate the
+situations a challenge scores.
+
+```
+powershell -File tools\warm-body.ps1 -Count 2 -Macro tools\join-match.macro -DryRun
+powershell -File tools\warm-body.ps1 -Count 2 -Macro tools\join-match.macro
+powershell -File tools\warm-body.ps1 -Stop
+```
+
+It provisions throwaway accounts, launches one client per bot with
+`/onlineUser` and `/onlinePassword` (switches confirmed working), walks a menu
+macro, then wanders. It identifies nothing and reads nothing.
+
+**Verified:** account creation, the launch switches, the input layer.
+**Not verified:** that the game will run two instances at once, and the menu
+macro. `join-match.macro` is a *starting point* — the keypresses to reach a
+match cannot be derived without watching the menus, so it is data-driven and
+ships uncalibrated rather than hard-coded to look tested. Run `-DryRun` first.
+
+**Focus is exclusive.** `SendInput` goes to whichever window has focus, so the
+script fronts each instance before driving it. While bots run you cannot use the
+machine — that is inherent to driving a game through synthetic input.
 
 ---
 
