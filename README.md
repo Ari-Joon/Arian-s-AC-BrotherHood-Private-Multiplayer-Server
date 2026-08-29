@@ -110,6 +110,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/rename-player.ps1` | Rename an account (this is the in-game name) |
 | `tools/dlc-privileges.sql` | DLC entitlements + locale fix |
 | `tools/cxb_tool.py` | Parse the `gamesettings` `.cxb` container |
+| `tools/glyph-swap.ps1` | Switch the controller diagram between Xbox and PlayStation |
 
 ### Display modes
 
@@ -121,6 +122,40 @@ powershell -File tools\acb-launcher.ps1 -Display Windowed -Width 1600 -Height 90
 ```
 
 `-Quality High` passes `/shadows:full /postfx:full /lightmode:full /msaa:full`, switches found in the game's own argument table.
+
+### Controller glyphs — Xbox or PlayStation
+
+Brotherhood ships **both** glyph sets on PC, but the executable only ever
+requests the Xbox one, so `Binding_PS3` sits unused. `glyph-swap.ps1` puts
+whichever artwork you want into the slot the game asks for, and switches back:
+
+```
+powershell -File tools\glyph-swap.ps1 -Status
+powershell -File tools\glyph-swap.ps1 -Set PlayStation
+powershell -File tools\glyph-swap.ps1 -Set Xbox
+```
+
+**Prerequisite** — unpack these in AnvilToolkit first, in order:
+`multi\DataPC_extra.forge`, then `1000_-_Binding_360_DiffuseMapDesc.data`,
+then `1001_-_Binding_PS3_DiffuseMapDesc.data`.
+
+Afterwards repack in AnvilToolkit, inner first (`1000_-_...data`, then
+`DataPC_extra.forge`). **Close the game before repacking** — it holds the forge
+open and Repack fails silently, with no error and no log line.
+
+The script keeps a pristine copy of the stock Xbox texture on first run, so the
+switch is reversible. No game assets are redistributed; both textures are read
+from your own installation.
+
+**Why it needs a script rather than a file copy:** each TextureMap carries a
+4-byte File ID at offset 2. Copying the PS3 texture brings its own ID
+(`0x1D3FE379`) with it, the game cannot bind the texture, and the diagram
+renders as a flat grey block. The script always rewrites the ID to the 360's
+value (`0x1D3FE3AF`).
+
+**Scope:** this changes the CONTROLLER LAYOUT diagram. Footer prompt icons are
+drawn from `PC_btn_circle`, a PC-only texture with no PlayStation counterpart,
+with the letter drawn over it as text — so those stay as they are.
 
 ---
 
