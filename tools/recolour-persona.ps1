@@ -87,7 +87,11 @@ if (-not $All -and -not $Persona) {
     Write-Host "Give -Persona <name> or -All." -ForegroundColor Yellow
     exit 1
 }
-$containers = Get-ChildItem -Path (Split-Path $root) -Filter "*_Set.data" -File
+# Not every persona texture lives in a *_Set.data container - ID18 keeps a
+# body texture in AC2MP_ID18_custom_top.data - so match any container and let
+# the diffuse-map check below decide. Scope is therefore whatever you have
+# unpacked, which is the thing you actually control.
+$containers = Get-ChildItem -Path (Split-Path $root) -Filter "*.data" -File
 if (-not $All) {
     $containers = $containers | Where-Object { $_.Name -like "*$Persona*" }
 } elseif ($Exclude.Count) {
