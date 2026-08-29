@@ -78,3 +78,6 @@ obj/
 
 # acb-graphics.ps1 writes this between -Set and -Verify
 tools/graphics-pending.json
+
+# Local Claude Code settings
+.claude/settings.local.json

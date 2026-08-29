@@ -13,13 +13,22 @@
   onlineUser/onlinePassword are confirmed working switches, and the input layer
   is the same SendInput/scancode approach as tools/acb-bot.ps1.
 
+  MULTIPLE CLIENTS ON ONE PC - SOLVED
+  The engine holds a named semaphore, \Sessions\<n>\BaseNamedObjects  scimitar_semaphore, and a second client sees it and exits after ~5s with
+  code 0 - a clean exit, which is why it reads as "the game will not start"
+  rather than an error. Releasing that handle in the running client lets the
+  next one start. This script does that between launches, so N bots run in ONE
+  Windows session with no user switching.
+
+  Nothing on disk is patched. The handle has to be released again after every
+  launch, because each new client creates the semaphore itself.
+
   WHAT IS AND IS NOT VERIFIED
-  Verified: account creation, the launch switches, the input layer.
-  NOT verified: that the game will run two instances at once, and the menu
-  macro below. The macro is deliberately data-driven (-Macro) because the
-  keypresses needed to reach a match cannot be worked out without watching it,
-  and hard-coding a guess would make it look calibrated when it is not. Run
-  with -DryRun first, then tune the macro against what you see.
+  Verified: account creation, the launch switches, the input layer, and two
+  clients running concurrently in one session, both authenticated.
+  NOT verified: the menu macro. The keypresses needed to reach a match cannot
+  be worked out without watching it, so the macro is data-driven (-Macro) and
+  ships uncalibrated rather than hard-coded to look tested.
 
   FOCUS. SendInput goes to whatever window has focus, so this brings the
   target instance to the front before every burst. While bots are running you
@@ -211,13 +220,21 @@ foreach ($a in $accounts) {
     $p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $GamePath -PassThru
     $procs += $p
     "$($p.Id),$($a.Name)" | Add-Content $pidFile
-    # Give each client time to reach a window before starting the next; two
-    # clients racing through startup is the likeliest way this falls over.
+    # Wait for a window before starting the next; two clients racing through
+    # startup is the likeliest way this falls over.
     for ($w = 0; $w -lt 60; $w++) {
         Start-Sleep -Seconds 1
         $p.Refresh()
         if ($p.HasExited) { Write-Host "   exited during startup (exit $($p.ExitCode))" -ForegroundColor Red; break }
         if ($p.MainWindowHandle -ne 0) { Write-Host "   window up after ${w}s" -ForegroundColor DarkGray; break }
+    }
+    # Release this client's single-instance guard so the NEXT one can start.
+    # Must happen after it is up, since the semaphore is created during startup.
+    if (-not $p.HasExited -and $index -lt $accounts.Count) {
+        $out = & dotnet run --project $guardProj --no-build -- $p.Id --close scimitar --quiet 2>&1
+        if ($LASTEXITCODE -eq 0) { Write-Host "   guard released" -ForegroundColor DarkGray }
+        else { Write-Host "   guard NOT released - the next client will refuse to start" -ForegroundColor Yellow
+               $out | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray } }
     }
 }
 
