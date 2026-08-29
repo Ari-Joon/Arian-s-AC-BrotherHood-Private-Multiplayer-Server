@@ -239,6 +239,41 @@ range, same block statistics.
 swizzle, in `DataPC.forge` as well as `DataPC_extra.forge`. They can be edited
 in place and repacked, with no DDS round-trip and no import step.
 
+## One codec gates almost everything left
+
+The same container magic `33 aa fb 57 99 fa 04 10` appears in three different
+kinds of file:
+
+| file | size | magic at |
+|---|---|---|
+| `multi/.../228_-_BarberUp_Set.data` | 1,275,022 | 4, 169 |
+| `Saved Games/.../SAVES/OPTIONS` | 1,754 | 16, 225, 896, 1039 |
+| `Saved Games/.../SAVES/ACBROTHERHOODSAVEGAME0.SAV` | 21,124 | 16, 237 |
+
+So archives and **save files** share one format. That corrects an earlier claim
+in this file and the README: *"there is no local save file, so it never
+persists"* was wrong. There is local state, and `OPTIONS` is rewritten on exit
+(observed at 13:38 immediately after a multiplayer session).
+
+Whether challenge progress lives in `OPTIONS` is **not verified** - it may hold
+only settings. But the possibility can no longer be dismissed on the grounds
+that nothing is stored locally.
+
+This makes the container codec the single highest-value unsolved problem, since
+one solution would unlock three separate things:
+
+1. unpacking resources without the AnvilToolkit GUI, which is currently the
+   only manual step in the texture pipeline,
+2. reading and possibly editing save state, which is the only route to the
+   challenge unlocks,
+3. very likely the `.cxb` gamesettings payload too, which is the route to
+   ability tuning and map rotation.
+
+`OPTIONS` at 1,754 bytes with four blocks is a far better specimen to attack
+than a 1.3 MB archive. It also changes when settings change, which allows a
+differential attack: alter one option in the menu, diff the file, and the
+region that moved is the region that encodes it.
+
 ## The `.data` container is compressed (unsolved)
 
 Editing a texture needs it unpacked out of its `.data` first, and that step
