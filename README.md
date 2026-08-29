@@ -495,13 +495,26 @@ the two bugs worth not repeating.
 ## AI texture upscaling
 
 Every diffuse texture in the multiplayer game is upscaled 2x through
-Real-ESRGAN and repacked — **69 character textures and 770 environment textures
-across twelve maps**. Offline, so it costs nothing at runtime, and permanent.
+Real-ESRGAN and repacked. Offline, so it costs nothing at runtime, and permanent.
+
+| set | textures | forges |
+|---|---|---|
+| Characters | 69 | `DataPC.forge` |
+| Environment | 770 | twelve map forges |
+| DLC skins | 294 | two skins forges |
+| **total** | **1,133** | **fifteen** |
+
+The DLC skins were nearly missed. Those archives use **hash-named containers**
+(`51_-_00000000A69A71B2.data`) rather than descriptive ones, so
+`anvil-unpack --filter DiffuseMap` matches nothing there and reports a clean zero
+— the whole archive has to be unpacked and the TextureMaps inside still carry
+real names. `batch.py --prefix DataPC_skins_` walks them.
 
 ```
 python tools/texture-upscale/upscale.py --in X.TextureMap --out Y.TextureMap \
        --scale 2 --model <path>/RealESRGAN_x4plus.fp16.onnx
 python tools/texture-upscale/batch.py --dry-run
+python tools/texture-upscale/batch.py --prefix DataPC_skins_
 ```
 
 Needs `numpy`, `pillow` and `onnxruntime`. The ONNX weights are fetched

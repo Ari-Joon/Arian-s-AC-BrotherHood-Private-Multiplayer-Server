@@ -23,9 +23,30 @@ G = r"C:\Program Files (x86)\Steam\steamapps\common\Assassins Creed Brotherhood"
 EXTRACTED = os.path.join(G, "multi", "Extracted")
 SD = os.path.dirname(os.path.abspath(__file__))
 MYBK = os.path.join(SD, "map_originals")
-MODEL = os.path.join(os.path.dirname(SD), "models", "RealESRGAN_x4plus.fp16.onnx")
+def find_model(explicit=None):
+    """Look beside the script first, then a sibling models/ directory.
 
-MAP_FORGES = "DataPC_AC2MP_", "DataPC_ACR_Rome_Multi"
+    The original path was relative to a scratchpad layout and broke the moment
+    this was installed into the repo - it resolved to tools/models/ and failed
+    with NO_SUCHFILE after the whole plan had already been built and printed,
+    which reads like a model problem rather than a path one.
+    """
+    names = ["RealESRGAN_x4plus.fp16.onnx", "RealESRGAN_x4plus.onnx"]
+    roots = [SD, os.path.join(SD, "models"), os.path.join(os.path.dirname(SD), "models")]
+    if explicit:
+        return explicit
+    for r in roots:
+        for n in names:
+            c = os.path.join(r, n)
+            if os.path.exists(c):
+                return c
+    return os.path.join(SD, names[0])          # for the error message
+
+# Which forges to walk. The DLC skins archives use HASH-NAMED containers
+# (51_-_00000000A69A71B2.data) rather than descriptive ones, so an
+# anvil-unpack --filter on container names finds nothing there and they must be
+# unpacked whole - the TextureMaps inside still carry real names.
+DEFAULT_PREFIXES = ("DataPC_AC2MP_", "DataPC_ACR_Rome_Multi")
 
 
 def deprioritise():
@@ -43,10 +64,10 @@ def width_of(path):
         return struct.unpack_from('<I', f.read(96), 10)[0]
 
 
-def collect(only=None):
+def collect(only=None, prefixes=DEFAULT_PREFIXES):
     out = []
     for d in sorted(os.listdir(EXTRACTED)):
-        if not any(d.startswith(p) for p in MAP_FORGES):
+        if not any(d.startswith(p) for p in prefixes):
             continue
         if only and only.lower() not in d.lower():
             continue
@@ -60,10 +81,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--only', help="restrict to forges whose name contains this")
+    ap.add_argument('--model', help="ONNX upscaler; found automatically if omitted")
+    ap.add_argument('--prefix', action='append',
+                    help="forge name prefix to walk; repeatable. "
+                         "Defaults to the multiplayer maps.")
     a = ap.parse_args()
 
     print("below-normal priority: %s" % deprioritise(), flush=True)
-    targets = collect(a.only)
+    targets = collect(a.only, tuple(a.prefix) if a.prefix else DEFAULT_PREFIXES)
     print("%d diffuse textures across the map forges" % len(targets), flush=True)
 
     plan, skipped = [], []
@@ -101,7 +126,13 @@ def main():
         print("dry run, nothing written")
         return
 
-    model = esrgan.Upscaler(MODEL, tile=192, overlap=24)
+    model_path = find_model(a.model)
+    if not os.path.exists(model_path):
+        print("no ONNX model found (looked beside the script and in models/): %s"
+              % model_path, file=sys.stderr)
+        return 2
+    print("  model: %s" % model_path, flush=True)
+    model = esrgan.Upscaler(model_path, tile=192, overlap=24)
     t_all = time.time()
     ok = fail = 0
     for i, (live, src, _) in enumerate(plan, 1):
