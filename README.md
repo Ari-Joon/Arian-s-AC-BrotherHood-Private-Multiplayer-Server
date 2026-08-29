@@ -112,7 +112,10 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | Script | Purpose |
 |---|---|
 | `tools/acb-settings.ps1` | Launcher GUI — display mode, quality, account |
-| `tools/acb-launcher.ps1` | CLI launcher; starts the server, applies window style |
+| `tools/acb-launcher.ps1` | CLI launcher; starts the server, applies window style and match rules |
+| `tools/cxb-edit` | Read and write sections of the served `gamesettings` `.cxb` |
+| `tools/ability_rules.py` | Retune ability cooldowns, durations, radii and speeds |
+| `tools/anvil-reflect` | Dump AnvilToolkit signatures when a write path is needed |
 | `tools/add-player.ps1` | Create an account with a random password |
 | `tools/rename-player.ps1` | Rename an account (this is the in-game name) |
 | `tools/dlc-privileges.sql` | DLC entitlements + locale fix |
@@ -137,6 +140,26 @@ The game has no windowed or borderless option, and its options menu cannot be ex
 powershell -File tools\acb-launcher.ps1 -Display Borderless -Quality High
 powershell -File tools\acb-launcher.ps1 -Display Windowed -Width 1600 -Height 900
 ```
+
+### Match rules
+
+Ability cooldowns, durations, radii and speeds are **served by the host**.
+QuazalWV's `PersistentStoreService` hands `gamesettings_c1380_d873_s6285.cxb`
+to every client on connect, so changing it on the server changes the rules for
+everyone who joins - nobody else installs anything.
+
+```
+powershell -File toolscb-launcher.ps1 -RulesOnly -CooldownScale 0.5
+powershell -File toolscb-launcher.ps1 -RulesOnly -AbilityRule AbilitySmokeBomb:Radius=8.0
+powershell -File toolscb-launcher.ps1 -RulesOnly -ResetRules
+```
+
+`-RulesOnly` applies rules without launching, so they can be changed between
+matches. Rules are always rebuilt from a pristine backup rather than the
+current file, so `-CooldownScale 0.5` twice still means half, not a quarter.
+
+`python tools/ability_rules.py --xml <file> --show` lists every tunable value.
+See [re/ABILITIES.md](re/ABILITIES.md) for the container format.
 
 `-Quality High` is a preset for `/shadows:full /postfx:full /msaa:8x` plus full
 mip chains. Every switch is also settable on its own, and the settings GUI drives
