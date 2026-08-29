@@ -214,6 +214,87 @@ than engineering.
 | `tools/bot-autoaccept.ps1` | **Unverified** — never observed accepting an invite |
 | `tools/bot_vm.py` | **Simulation only** — never driven a real client |
 | `tools/join-match.macro` | **Uncalibrated** starting point |
+| `tools/unthrottle` | **Works, but fixes nothing** - throttling was disproved as a cause |
+
+---
+
+## Why clients die: two things that are NOT the cause
+
+Recorded because both looked convincing and both were wrong. A rejected
+hypothesis written down is worth more than the hour it takes to re-test it.
+
+### Not background throttling
+
+The theory: Windows throttles background processes, so a bot behind another
+window stops sending PRUDP keepalives and the server drops it. It fit the log
+exactly - a PING ACK, silence, then `TIMEOUT` about 25 seconds later.
+
+Tested directly. A bot was minimized (`SW_MINIMIZE`, confirmed with `IsIconic`,
+confirmed not foreground) and left for four minutes, with and without power
+throttling disabled via `SetProcessInformation`/`ProcessPowerThrottling`:
+
+| Condition | Result |
+|---|---|
+| minimized, throttling untouched | survived 4 min |
+| minimized, throttling disabled  | survived 4 min |
+
+No difference, and the control did not die. **Background throttling does not
+kill clients.** `tools/unthrottle` was built for this and is kept because
+High priority for background bots is harmless, but it fixes nothing.
+
+### `TIMEOUT` in the server log is an effect, not a cause
+
+`[JubblyJoon] TIMEOUT` appears six times against `[Bot1] TIMEOUT` once. That is
+the human client being closed normally. The server logs `TIMEOUT` when a client
+stops answering - which is what a client that has already exited looks like.
+Reading it as the reason a client died is backwards.
+
+### The real requirement that was missed for an hour
+
+**The server must actually be running.** `ACBRDV.exe` had stopped at 21:09 and
+every test run after that was against nothing, producing both false survivals
+and false deaths. Check before trusting any client result:
+
+```powershell
+Get-Process ACBRDV, ACBMP | Select-Object Name, Id, StartTime
+```
+
+The log's last-write time is the quickest tell - if it is not moving while a
+client is connecting, the server is down.
+
+## The port split, measured
+
+Solo, one client holds the full fixed set:
+
+```
+pid 53612 (alone)   UDP: 7917, 12000, 12001, 61977
+```
+
+With a second client running it splits, and neither side holds what a match
+needs. This is why the **lobby works but the match does not**: the lobby is
+server-mediated, the match is peer-to-peer over those fixed ports.
+
+Confirmed again in testing: loading a **private** lobby with a bot running
+crashes at the loading screen. Same wall as Play Now, not a separate bug.
+
+**No configuration route around it.** The game INI has 151 keys, all graphics
+and input - no port, bind or network keys at all. The only port strings in
+`ACBMP.exe` are UPnP (`NewExternalPort`, `NewInternalPort`,
+`NewPortMappingDescr`), which map ports on the router rather than choose local
+ones. A separate network stack - VM or second PC - remains the only fix.
+
+### Practical rule
+
+**Any bot running means no match can be loaded, private or public.** Close all
+bots before playing. Bots are usable for lobby, presence and invite testing
+only, until they live on their own network stack.
+
+## A weakness in `warm-body.ps1`
+
+It waits for a window handle before launching the next client. A window handle
+appears at the splash screen, well before login completes, so clients can be
+started while the previous one is still connecting and race for ports. If bots
+behave inconsistently, launch spacing is the first thing to suspect.
 
 ---
 
