@@ -185,6 +185,7 @@ python tools/recolour_texture.py --texture "<path>\1_-_BarberUp_DiffuseMap.Textu
 | `--auto-map` | Analyse the atlas and write a starter region map |
 | `--mask-coherence` | How much of the 3×3 around a block must agree before it is held back |
 | `--max-saturation` | Only recolour blocks duller than N, so leather, wood and metal keep their own colour |
+| `--strong-saturation` | Blocks this colourful are protected whatever their hue, so dyed cloth survives |
 | `--levels` | Force one tonal range across every texture of an outfit so the halves match |
 | `--dry-run` | Preview only, write nothing |
 | `--restore` | Put the backup back |
@@ -197,6 +198,13 @@ should stay its original colour.
 while leather, wood and metal are strongly coloured, so a single threshold
 (around `25`) recolours the garment and leaves its fittings alone — no region
 picking, and it transfers to any persona.
+
+Protection is **hue-aware**, which matters more than the threshold. On the
+Barber, 6,549 protected blocks were warm (leather, wood, skin) and 771 were cool
+blue-greys — and both sat in the same 30–44 saturation band, so no threshold
+could separate them. Requiring protected blocks to be *warm* recolours the greys
+and keeps the leather. `--strong-saturation` then rescues strongly dyed cloth of
+any hue, so a green sash survives on warmth grounds it would otherwise fail.
 
 #### Region maps — colouring parts individually
 

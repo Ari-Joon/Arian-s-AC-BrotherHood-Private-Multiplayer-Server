@@ -265,7 +265,7 @@ def sat_lut():
 
 
 def recolour(payload, kind, lut, w, h, mips, keep=(), sat_max=None,
-             coherence=5, only=()):
+             coherence=5, only=(), strong=50):
     """Transform every block of every mip level. Returns (data, stats).
 
     sat_max leaves already-colourful blocks alone. On a character atlas the
@@ -294,8 +294,22 @@ def recolour(payload, kind, lut, w, h, mips, keep=(), sat_max=None,
                     off = mo + (by * bw + bx) * step + cbase
                     if off + 8 > len(data):
                         continue
-                    if (sl[data[off] | (data[off + 1] << 8)] > sat_max or
-                            sl[data[off + 2] | (data[off + 3] << 8)] > sat_max):
+                    v0 = data[off] | (data[off + 1] << 8)
+                    v1 = data[off + 2] | (data[off + 3] << 8)
+                    sat = sl[v0] if sl[v0] > sl[v1] else sl[v1]
+                    if sat <= sat_max:
+                        continue
+                    # Saturation alone protects the wrong things. Leather, wood
+                    # and skin sit in the same 30-44 band as cool blue-greys, so
+                    # no threshold separates them - but hue does. Protect what is
+                    # WARM, plus anything strongly coloured whatever its hue, so
+                    # dyed cloth survives while neutral greys get recoloured.
+                    if sat > strong:
+                        mask[by * bw + bx] = 1
+                        continue
+                    r0, _, b0 = dec565(v0)
+                    r1, _, b1 = dec565(v1)
+                    if r0 > b0 + 8 or r1 > b1 + 8:
                         mask[by * bw + bx] = 1
             if coherence > 0 and bw > 2 and bh > 2:
                 grown = bytearray(bw * bh)
@@ -600,6 +614,9 @@ def main():
     ap.add_argument("--max-saturation", type=int, default=None, metavar="N",
                     help="only recolour blocks duller than N (0-255). Keeps leather, "
                          "wood and metal while recolouring near-grey cloth. Try 40.")
+    ap.add_argument("--strong-saturation", type=int, default=50, metavar="N",
+                    help="blocks this colourful are protected whatever their hue, "
+                         "so dyed cloth survives (default 50)")
     ap.add_argument("--only", default="",
                     help="recolour ONLY these cells or rects - the inverse of --keep")
     ap.add_argument("--regions", help="JSON file of named outfit parts")
@@ -688,7 +705,7 @@ def main():
               "to match other textures)" % (levels + levels))
     lut = build_lut(a.scheme, max(0.0, min(1.0, a.strength)), levels)
     new, st = recolour(payload, kind, lut, w, h, mips, keep, a.max_saturation,
-                       a.mask_coherence, only)
+                       a.mask_coherence, only, a.strong_saturation)
     print("  scheme '%s' - %s" % (a.scheme, SCHEMES[a.scheme]["desc"]))
     print("  %d blocks: %d recoloured, %d kept original"
           % (st["blocks"], st["changed"], st["kept"]))
