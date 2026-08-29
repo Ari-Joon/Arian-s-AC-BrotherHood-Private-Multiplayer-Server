@@ -239,6 +239,73 @@ range, same block statistics.
 swizzle, in `DataPC.forge` as well as `DataPC_extra.forge`. They can be edited
 in place and repacked, with no DDS round-trip and no import step.
 
+## Save files: where challenge progress must live, and why it is still shut
+
+**Everything outside the container is ruled out.** Swept and verified empty:
+the registry footprint (no binary value anywhere above 4 bytes; the `ADVAPI32`
+imports serve install path, language and a hotfix check), Ubisoft Connect cloud
+saves, Steam Cloud under all three `userdata` IDs, the `ProgramData` folder
+(exists, empty), and both the AppData and Documents INI stubs (211 bytes each).
+The decisive test was sweeping every tree for files written in the window
+bracketing a `.SAV` write: the only game-owned artifact in it was the `.SAV`.
+
+So challenge progress is **not reachable outside the container**. That closes
+the "maybe it is in the registry" line rather than leaving it an untested maybe.
+
+### The target
+
+`ACBROTHERHOODSAVEGAME0.SAV` chunk 2 declares **1,985 compressed -> 32,768
+uncompressed** at `0x0ed`. A fixed 32 KB state block in the only game file
+written during play.
+
+| file | chunk offsets (compressed -> uncompressed) |
+|---|---|
+| `OPTIONS` | `0x010` 165->289, `0x0e1` 627->1306, `0x380` 91->162, `0x40f` 728->6135 |
+| `.SAV` | `0x010` 177->284, `0x0ed` **1985->32768** |
+
+The `OPTIONS` offsets `0x010/0x0e1/0x380/0x40f` are decimal 16/225/896/1039 -
+the same values derived independently above. Two derivations agreeing.
+
+Strings verified present in `ACBMP.exe`, worth grepping the moment a chunk
+inflates: `PlayerProgressionSaveData`,
+`SnapshotPlayerProgressionSaveDataDelta`, `ChallengeRewardManager`,
+`UnlockConditionChallenge`, `ChallengeDifficulty_Basic/Advanced/Hard/Elite`,
+`OnlineEventValidateChallengeStarted/Finished`. Also
+`SaveGameAction_SaveProfileOptions` / `LoadProfileOptions`, which is what makes
+`OPTIONS` the profile blob.
+
+### Attempted and NOT working
+
+Calling `Manager.Decompress` with a hand-sliced payload **crashes native LZO
+with an access violation** at every offset swept (M+24 to M+40, lengths +/-8).
+The crash kills the process, so each attempt needs its own subprocess and the
+sweep is slow as well as fruitless.
+
+Feeding the file to `DataBlock.Read` with a `CompressionInfo` parsed from the
+stream does not work either. At offset 0 it returns 197 bytes that are
+**byte-identical to `raw[12:209]`** - raw passthrough, not decompression,
+because the `CompressionInfo` it parsed is garbage (`Algorithm=251`,
+`BlockSize=83532119` when started at the magic).
+
+A false positive worth recording: that output contains the readable string
+`Options`, which looks like a decompression success and is not - `Options` is
+present in the raw file too. Check any apparent plaintext against the raw bytes
+before believing it.
+
+**Conclusion:** the `.data` path is solved and batch unpacking works, but save
+files are **not** `.data` containers. Their outer structure differs, so
+`DataFile`/`DataBlock` cannot parse them as-is. The next honest step is to find
+whichever AnvilToolkit type reads save files, or to work out the save's own
+outer header rather than assuming it matches an archive.
+
+### Unclaimed lead, for whoever owns netcode
+
+`OnlineEventValidateChallengeStarted` / `Finished` implies challenge validation
+crosses the online-event path, even though the challenges *screen* issues no
+requests - those are different things, so this does not contradict the "zero
+server requests" finding. `QuazalWV/RMC/Services/PersistentStoreService/` exists
+in the tree with only `GetItem` implemented.
+
 ## The OPTIONS save container - structure solved, codec not
 
 `Saved Games/.../SAVES/OPTIONS` is 1,754 bytes and holds **four** compressed
