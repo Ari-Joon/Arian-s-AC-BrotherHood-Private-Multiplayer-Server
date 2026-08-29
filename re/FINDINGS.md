@@ -239,6 +239,59 @@ range, same block statistics.
 swizzle, in `DataPC.forge` as well as `DataPC_extra.forge`. They can be edited
 in place and repacked, with no DDS round-trip and no import step.
 
+## The OPTIONS save container - structure solved, codec not
+
+`Saved Games/.../SAVES/OPTIONS` is 1,754 bytes and holds **four** compressed
+blocks. The block layout is now fully mapped:
+
+```
+  M+0   magic  33 aa fb 57 99 fa 04 10
+  M+8   constant  01 00 02 00        (131073)
+  M+12  constant  80 00 00 01        (16777344)
+  M+16  compressed size   u32
+  M+20  uncompressed size u32
+  M+24  hash / checksum   u32
+  M+28  payload begins
+```
+
+| block | magic at | payload at | compressed | uncompressed | ratio |
+|---|---|---|---|---|---|
+| 0 | 16 | 44 | 165 | 289 | 57% |
+| 1 | 225 | 253 | 627 | 1,306 | 48% |
+| 2 | 896 | 924 | 91 | 162 | 56% |
+| 3 | 1,039 | 1,067 | 687 | 6,117 | **11%** |
+
+Block 3 ends at byte 1,754, exactly the file length, which confirms the payload
+offset. Blocks are separated by 16 to 24 bytes of inter-block record.
+
+**The codec is not any standard one.** Every combination of payload offset
+(M+20 to M+44) and length (size, ±4, ±8, ±12) was tried against:
+
+- LZ4 block, zlib, raw deflate, gzip, bz2
+- LZMA container, LZMA1 raw, LZMA2 raw (dictionary sizes 64 KB to 64 MB)
+- LZO1X-1 (implemented from scratch for this, since no binding was installed)
+
+None produced the declared uncompressed size at any offset. Combined with the
+`.cxb` result - roughly 200 LZSS parameter combinations each decoding exactly 33
+correct bytes before failing - and AnvilToolkit symbols naming
+`GetDecompressionDictionary` and `tag_dictionary.tdct`, the evidence points to a
+**dictionary-based scheme whose back-references resolve into a table not present
+in the file**. No amount of codec guessing will succeed without that dictionary,
+and no dictionary file was found in either the game or AnvilToolkit.
+
+### The way through
+
+AnvilToolkit already implements this. It ships `K4os.Compression.LZ4.dll`,
+`EasyCompressor.LZMA.dll` and `fast-lzma2.dll`, and it is .NET 9.
+
+The machine has the .NET 9.0.19 **runtime** but no **SDK**, so its decompressor
+cannot be called from here. Installing the .NET SDK would allow a small C#
+program to load `AnvilToolkit.dll` and invoke its decompression directly -
+turning this from a reverse-engineering problem into an API call, and unlocking
+GUI-free unpacking, save editing and probably the `.cxb` payload at once.
+
+    https://dotnet.microsoft.com/download/dotnet/9.0
+
 ## One codec gates almost everything left
 
 The same container magic `33 aa fb 57 99 fa 04 10` appears in three different
