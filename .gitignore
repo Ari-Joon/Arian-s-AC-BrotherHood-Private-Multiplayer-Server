@@ -75,3 +75,6 @@ re/ini-backup/
 # .NET build output
 bin/
 obj/
+
+# acb-graphics.ps1 writes this between -Set and -Verify
+tools/graphics-pending.json

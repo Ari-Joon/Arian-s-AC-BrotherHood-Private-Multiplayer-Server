@@ -167,7 +167,7 @@ Style-Combo $qBox
 $qBox.SelectedItem = $(if ($cfg.Quality) { $cfg.Quality } else { 'High' })
 $form.Controls.Add($qBox)
 
-[void](Add-Text "High passes /shadows /postfx /lightmode /msaa" 34 336 $fSmall $cMuted)
+[void](Add-Text "High passes /shadows:full /postfx:full /msaa:8x" 34 336 $fSmall $cMuted)
 
 $syncRes = {
     $on = $radios['Windowed'].Checked

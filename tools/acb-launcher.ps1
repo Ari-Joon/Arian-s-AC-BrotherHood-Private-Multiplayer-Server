@@ -74,8 +74,28 @@ if (Test-Path $ds4) {
 # --- build the client command line ------------------------------------------
 $argv = @("/onlineUser:$User", "/onlinePassword:$Password")
 if ($Quality -eq 'High') {
-    # Switch names read out of ACBMP.exe's own argument table.
-    $argv += @("/shadows:full", "/postfx:full", "/lightmode:full", "/msaa:full")
+    # Switch names AND their value vocabulary read out of ACBMP.exe's own tables.
+    # The general vocabulary is  off | on | force | default | normal | full.
+    #
+    # msaa has a SEPARATE one - none | 2x | 4x | 6x | 8x - matching the
+    # Multisample_8x .. Multisample_None enum in the binary. "/msaa:full" is not
+    # a value the game accepts, so it was doing nothing.
+    $argv += @("/shadows:full", "/postfx:full", "/msaa:8x")
+
+    # Keep the full mip chain. The default drops mips: measured against a bogus
+    # control switch (noise floor 0.2 MB), these three add ~109 MB of resident
+    # texture data. That is evidence the switches DO something, not evidence
+    # that the image looks better - nobody has compared frames yet.
+    $argv += @("/skipmips:off", "/skipmipscharacter:off", "/skipmipsenvironment:off")
+
+    # /lightmode is deliberately NOT passed. DisplayOptions::LightingMode
+    # enumerates NormalLighting | DefaultLight | FullBright, so "/lightmode:full"
+    # most likely selects FullBright - a flat debug view with the lighting taken
+    # out. That is a fidelity loss, not a gain.
+    #
+    # /generateatlasmipmaps:on measures ~111 MB, close enough to the skipmips
+    # figure that it is probably the same effect counted twice. Left out until
+    # someone separates them.
 }
 Write-Host "Launching as $User ($Display, $Quality quality)" -ForegroundColor Cyan
 Start-Process -FilePath "$game\ACBMP.exe" -WorkingDirectory $game -ArgumentList $argv

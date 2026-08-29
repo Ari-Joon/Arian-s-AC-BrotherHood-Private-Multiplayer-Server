@@ -83,17 +83,16 @@ ReflectionQuality  3   CharacterQuality 4
 conclusion here, "the menu ceiling is the engine ceiling, there is no hidden
 visual headroom", was drawn from the wrong file.
 
-### There is a THIRD INI, and it is the one multiplayer reads
+### There is a THIRD INI — and the key naming is not what it looks like
 
 ```
 <game>\ACBrotherhoodMP.ini        <- multiplayer [Graphics]
 ```
 
 Same filename as the Saved Games one, different directory, different contents —
-the Saved Games copy holds key bindings, this one holds graphics. It is written
-by `ACBMP.exe` on exit like the others, and it uses the `Options*` key names
-recovered from string analysis below, which were assumed to live in the Saved
-Games file and do not:
+the Saved Games copy holds key bindings, this one holds graphics. It uses the
+`Options*` key names recovered from string analysis below, which were assumed to
+live in the Saved Games file and do not:
 
 ```
 [Graphics]
@@ -106,18 +105,75 @@ OptionsCharacterQuality=2
 ```
 
 As shipped, **every quality key sits at 2** — the top of a three-step
-Low/Medium/High menu. But the sibling singleplayer keys have documented range
-well above that: shadows to 4, reflections to 3, characters to 4. Whether the
-multiplayer renderer accepts those values or clamps them back to 2 is
-**untested**, and it is the one place left where fidelity might be sitting
-unclaimed behind a menu that simply does not offer it.
+Low/Medium/High menu, while the bare-named keys in `ACBrotherhood.ini` already
+sit at 5, 4, 3 and 4. So one of these files is holding multiplayer down and the
+other is not, and **which file multiplayer honours is unresolved.**
 
-`tools/acb-graphics.ps1 -Set Beyond` writes the higher values; play once, quit,
-then `-Verify` reads back what the game kept. Record the answer here.
+#### Do not resolve it by assuming the naming splits by executable
+
+It does not. Searched as UTF-16 (the INI is read through
+`GetPrivateProfileStringW`, so an ASCII search misses every key name — which is
+why the key list below was short):
+
+| string | `ACBMP.exe` | `ACBSP.exe` |
+|---|---|---|
+| `ACBrotherhoodMP.ini` | 1 | **0** |
+| `ACBrotherhood.ini` | 3 | 2 |
+| `OptionsShadowQuality`, `OptionsPostFX`, `OptionsCurrentResolution` | 1 each | 1 each |
+| bare `ShadowQuality`, `EnvironmentQuality` | 2 each | 2 each |
+| `GraphicsModified` | 1 | 0 |
+
+Both executables carry **both** naming conventions, so `Options*` is not a
+multiplayer dialect. And the multiplayer binary names *both* graphics files,
+which is consistent with the observation that `ACBrotherhood.ini` was rewritten
+during a session where the only game process running was `ACBMP.exe`.
+
+The names cluster into three tables, which is the more useful structure:
+
+```
+30908020..30908404  OptionsSelectedPad OptionsPostFX OptionsCharacterQuality
+                    OptionsReflectionQuality OptionsShadowQuality
+                    OptionsTextureQuality OptionsEnvironmentQuality
+                    OptionsVSync OptionsCurrentMSAAMode OptionsCurrentResolution
+
+30925996..30926348  GraphicsModified PostFX CharacterQuality ReflectionQuality
+                    ShadowQuality TextureQuality EnvironmentQuality VSync
+                    SupportedMSAAModes CurrentMSAAMode SupportedResolutions
+                    CurrentResolution
+
+32094172..32094376  MultiSampleType RefreshRate DisplayHeight DisplayWidth
+                    MonitorDesc AdapterDeviceID AdapterVendorID  + "Graphics"
+```
+
+The third is plainly the `[Graphics]` section header and its keys. The second
+contains `SupportedMSAAModes` and `GraphicsModified`, which **cannot** be INI
+keys — so that table is at least partly the runtime options object's property
+names, and the bare names appearing in a file do not by themselves prove the
+file is read.
+
+**No anisotropic-filtering key exists in either binary** — zero hits for
+`Anisotropic` in any encoding. The game has no AF setting at all, so forcing it
+in the display driver is the only route, and it is likely the single largest
+untapped fidelity win on ground and wall textures.
+
+#### The experiment
+
+`tools/acb-graphics.ps1 -Set Beyond` writes the higher values; play once, exit
+**through the menu**, then `-Verify` reads back what the game kept. Killing the
+process skips the write-on-exit entirely and yields a result indistinguishable
+from a pass. Record the answer here.
 
 Two smaller things visible in the same file: `RefreshRate` was **60** on a
 240 Hz panel, and `MultiSampleType` is MSAA and is not a quality-menu entry, so
 neither is subject to whatever the menu clamps.
+
+**66 switches are registered, not the 21 listed below** — each referenced once
+from `.text` at a regular 0x3c stride with its own handler. Memory-residency
+measurements against an invented control switch (noise floor 0.2 MB) put
+`/skipmips:off /skipmipscharacter:off /skipmipsenvironment:off` at +108.6 MB and
+`/generateatlasmipmaps:on` at +111.5 MB — close enough to be the same effect
+counted twice. That proves the switches do something; it does **not** prove the
+image improves. Nobody has compared frames.
 
 **Key bindings are fully open**, by contrast — `ACBrotherhoodMP.ini` holds
 complete scancode bindings for `[Keyboard]`, `[KeyboardAlt]`, `[KeyboardMouse2]`

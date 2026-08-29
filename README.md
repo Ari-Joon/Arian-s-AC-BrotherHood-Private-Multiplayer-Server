@@ -111,6 +111,7 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/dlc-privileges.sql` | DLC entitlements + locale fix |
 | `tools/cxb_tool.py` | Parse the `gamesettings` `.cxb` container |
 | `tools/glyph-swap.ps1` | Switch the controller diagram between Xbox and PlayStation |
+| `tools/acb-graphics.ps1` | Read and raise the multiplayer graphics settings |
 | `tools/recolour_texture.py` | Recolour a persona or any BC1/BC2 texture, reversibly |
 | `tools/recolour-persona.ps1` | Recolour a whole persona at once, with matching tone |
 | `tools/bot_vm.py` | Behaviour VM for bot players — tiers, patrols, pursuit |
@@ -128,7 +129,81 @@ powershell -File tools\acb-launcher.ps1 -Display Borderless -Quality High
 powershell -File tools\acb-launcher.ps1 -Display Windowed -Width 1600 -Height 900
 ```
 
-`-Quality High` passes `/shadows:full /postfx:full /lightmode:full /msaa:full`, switches found in the game's own argument table.
+`-Quality High` passes `/shadows:full /postfx:full /msaa:8x`, switches found in
+the game's own argument table.
+
+Two of those used to be wrong. The MSAA switch has its own value vocabulary —
+`none | 2x | 4x | 6x | 8x`, matching the `Multisample_8x`..`Multisample_None`
+enum — so the old `/msaa:full` was not a value the game accepts and did nothing.
+And `/lightmode:full` is no longer passed at all: `DisplayOptions::LightingMode`
+enumerates `NormalLighting | DefaultLight | FullBright`, so `full` most likely
+selects the flat debug view, which takes lighting *away*.
+
+### Graphics quality — three INI files, and an open question
+
+There are **three** INIs, not two, and until today the third was missed entirely:
+
+```
+%USERPROFILE%\Saved Games\Assassin's Creed Brotherhood\
+    ACBrotherhood.ini      bare key names — ShadowQuality=4, PostFX=1
+    ACBrotherhoodMP.ini    key bindings only
+<game>\
+    ACBrotherhoodMP.ini    Options* key names — OptionsShadowQuality=2
+```
+
+`ACBMP.exe` names **both** graphics files as wide strings, so the multiplayer
+binary touches both and the third file is certainly real. **Which one actually
+drives multiplayer rendering is unresolved**, and the two candidates predict
+opposite things:
+
+- the `Options*` file ships every quality key at **2**, the top of the
+  three-step in-game menu;
+- the bare-name file already ships **above** that — 4, 3 and 4 — so on that
+  reading multiplayer is running high already.
+
+Do not assume the convention splits by executable: `ACBSP.exe` contains the same
+`Options*` names, and both binaries carry the bare names too. The bare list also
+holds `SupportedMSAAModes` and `GraphicsModified`, which cannot be INI keys at
+all, so some of those names are runtime properties rather than file keys.
+
+Settling it needs one clean run: raise the keys with the game closed, exit
+**through the menu**, re-read. Killing the process proves nothing — write-on-exit
+is the whole mechanism.
+
+```
+powershell -File tools\acb-graphics.ps1 -Status
+powershell -File tools\acb-graphics.ps1 -Set Beyond
+powershell -File tools\acb-graphics.ps1 -Verify     # after playing once and quitting
+powershell -File tools\acb-graphics.ps1 -Restore
+```
+
+The game rewrites this INI **on exit**, which is what makes the test work: set
+the values, play a match, then quit **through the menu**. Do not open the in-game
+graphics menu in between — saving it writes the menu's own values back over
+yours. The script refuses to write while `ACBMP.exe` is running, and keeps a
+backup of the original.
+
+`-Verify` checks **whether the game rewrote the file** before it believes any
+value, because a value comparison alone cannot tell a pass from a non-run:
+
+| what `-Verify` sees | what it means |
+|---|---|
+| file unchanged | the run says **nothing** — usually the game was killed rather than exited, so the write never happened |
+| rewritten, key gone | **inert** — the game rewrote the file and did not re-emit that key |
+| rewritten, value back to 2 | **read and clamped** |
+| rewritten, value still 5 | **read and honoured** — real headroom the menu never offers |
+
+It baselines all three INIs, not just the one it edits, so a run that rewrites a
+file nobody was watching is not mistaken for a run that rewrote nothing. On a
+no-run it keeps the pending state so the test still stands.
+
+It targets `<game>\ACBrotherhoodMP.ini`. If the open question above resolves the
+other way, point it at the other file with `-GamePath`, or the tool will be
+editing something the game ignores.
+
+`-Set Beyond` also sets `MultiSampleType=8` and raises `RefreshRate` to the
+display's actual rate; neither is a quality-menu entry, so neither is subject to
+whatever the menu clamps.
 
 ### Controller glyphs — Xbox or PlayStation
 
@@ -236,12 +311,9 @@ texture the persona owns, measures the tonal range **once** and forces it on all
 of them, so the halves match instead of drifting apart:
 
 ```
-powershell -File tools
-ecolour-persona.ps1 -Persona Barber -Scheme gold_black
-powershell -File tools
-ecolour-persona.ps1 -Persona Barber -Status
-powershell -File tools
-ecolour-persona.ps1 -Persona Barber -Restore
+powershell -File tools\recolour-persona.ps1 -Persona Barber -Scheme gold_black
+powershell -File tools\recolour-persona.ps1 -Persona Barber -Status
+powershell -File tools\recolour-persona.ps1 -Persona Barber -Restore
 ```
 
 It reports which of the persona's resources still need unpacking in AnvilToolkit.
