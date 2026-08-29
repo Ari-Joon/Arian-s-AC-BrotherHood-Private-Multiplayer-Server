@@ -130,6 +130,31 @@ A nearby value vocabulary suggests the accepted arguments:
 No `windowed` or `borderless` switch exists — hence the launcher applying the
 window style via Win32 after launch instead.
 
+## PlayStation button glyphs are already in the PC build
+
+`multi/DataPC_extra.forge` ships **both** glyph sets as a matched pair:
+
+```
+Binding_360_DiffuseMapDesc      <- Xbox prompts (what the game uses)
+Binding_PS3_DiffuseMapDesc      <- PlayStation prompts, present but unused
+Tips_Hud_Extend_360_MapDesc     /  Tips_Hud_Extend_PS3_MapDesc
+Tips_CrossAir_360_MapDesc       /  tips_crossair_PS3_MapDesc
+```
+
+The PC release never selects the PS3 variants, but the textures are there. So
+PlayStation prompts are a **texture swap, not a code change** — copy the PS3
+texture into the slot the game requests, or find the selector that chooses
+between them.
+
+Blocked only on AnvilToolkit's **Repack**, which has not yet succeeded. Repack
+is currently the single blocker for three separate mods: persona recolouring,
+weapon-model swaps, and these glyphs.
+
+Context: a DualSense reaches the game through DS4Windows + ViGEm as a virtual
+Xbox 360 pad, so the game legitimately believes it is an Xbox controller and
+shows `Binding_360`. Swapping the texture is what makes the prompts match the
+hardware.
+
 ## What this does *not* get you
 
 Adding new UI (a colour picker), new abilities, or new gameplay behaviour still
