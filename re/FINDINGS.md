@@ -468,6 +468,68 @@ else. The command line registers `gamemode`, `startupmission` and `missionroot`,
 and `wanted` appears in the binary as a string, so a mode may be selectable
 without the lobby — untested.
 
+## Abilities are data, not code — and there are 75 of them
+
+The `.cxb` is solved (see `tools/cxb-edit`), and `abilitymanagermulti` inflates
+to 93,684 bytes of plain XML. That retires the old claim that "the eight
+abilities are compiled into ACBMP.exe; the .cxb only supplies their parameters."
+Both halves were wrong.
+
+```
+m_AbilityReferenceList        75
+m_UnlockConditionAbilityList  75
+m_AbilitySetList               0     <- empty in the shipped file
+```
+
+**22 ability classes**, most present four times — one per upgrade tier:
+
+| kind | classes |
+|---|---|
+| active | Disguise, Decoy, Morph, SmokeBomb, HiddenGun, Poison, ThrowingKnives, FireCracker, PowerCharge, SpeedBoost, TemplarVision, Silent |
+| passive / streak | AutoBash, ChaseBoost, Escapist, ExtraSensitivity, OverallCooldown, Resistance, ScoreX2, SilentHunt, KillScoreBonus, ResetCooldowns |
+
+**Every parameter is exposed and editable.** Not just cooldowns:
+
+```
+AbilityDecoy         CooldownDuration Duration Radius DisguiseDelayMin DisguiseDelayMax
+AbilityHiddenGun     CooldownDuration FocusDuration MinHit TargetAwarnessDelay
+AbilityPoison        CooldownDuration Delay Range Score PoisonType
+AbilityPowerCharge   CooldownDuration Duration Range ControlCoef CosMax OverBoost
+AbilityMorph         CooldownDuration Radius MaxEntities
+AbilityResetCooldowns StreakValue factor forceResetToZero
+```
+
+**Unlock gating is data as well.** Each of the 75 has an `AbilityUnlockCondition`
+pointing at a `UnlockConditionLevel`:
+
+```xml
+<AbilityUnlockCondition memberName="UnlockConditionAbilityList">
+  <Handle propertyName="AbilityRef" objID="2375578155"/>
+  <Pointer propertyName="UnlockConditionRef" classID="1688405200">
+    <UnlockConditionLevel memberName="UnlockConditionRef"><Level value="2"/></UnlockConditionLevel>
+  </Pointer>
+</AbilityUnlockCondition>
+```
+
+Setting every `Level` to 1 would make the whole roster available immediately.
+The same pattern gates game modes in `gamemodemanagermulti` (9 conditions).
+
+**SERVER-AUTHORITATIVE.** `PersistentStoreService` reads this file per request,
+so the host edits it once and every client that connects inherits the change.
+No forge patching, no asset handed to anyone.
+
+**What is still impossible:** a genuinely new ability. Each `<AbilityX>` element
+binds to a compiled class through `classID`, so inventing `AbilityTeleport`
+needs code. Retuning, retiering and unlocking what exists does not.
+
+**Unexposed game modes.** The file carries `gamemode_pacman`, `gamemode_catsmice`,
+`gamemode_vip`, `gamemode_teamvip` and `gamemode_free` sections alongside the
+modes the menu offers. Whether the client can be pointed at them is untested.
+
+**No minimum-player count lives here.** `gamemodeparams_*` holds spawn distances
+and timers, and `gamemodemanagermulti` holds level-based unlocks — nothing about
+party size. That is consistent with the launch gate being client-side.
+
 ## The single-instance guard, decoded — and why it does not explain what we see
 
 `ACBMP.exe` creates a named semaphore at startup and gives up if it already
