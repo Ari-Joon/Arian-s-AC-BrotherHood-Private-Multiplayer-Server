@@ -97,6 +97,57 @@ powershell -STA -File tools\acb-settings.ps1
 
 ---
 
+## Playing alone
+
+A private lobby refuses to start below a minimum and greys out LAUNCH with
+*"There are not enough members in your group to play this mode in a PRIVATE
+session."* Each mode carries its own minimum:
+
+| Mode | Private minimum |
+|---|---|
+| MANHUNT, CHESTCAPTURE, TEAMVIP | 2 |
+| ALLIANCE, ADVALLIANCE | 3 |
+| WANTED, ASSASSINATE, advwanted | 4 |
+
+**So a two-player private lobby needs no modification at all** — pick one of the
+first three modes. For a genuinely solo match:
+
+```
+python tools\solo-launch-patch.py --apply
+python tools\solo-launch-patch.py --status
+python tools\solo-launch-patch.py --revert
+```
+
+The client matches gamesettings XML attributes against a table of names
+compiled into `ACBMP.exe`. This renames `PrivateMinPlayers` there, so the lookup
+never matches and the field keeps its constructor default. One byte, same
+length, reversible, and the `.cxb` is not touched.
+
+**Only the machine playing alone needs it.** Friends run a stock game; nothing
+is redistributed. Steam's *Verify integrity of game files* restores the original
+and silently switches solo launch back off — `--status` will tell you.
+
+The tool refuses to patch blind: it stops if the string is missing, occurs more
+than once, or is not NUL-terminated where expected, so a game update cannot turn
+it into a silent corruption.
+
+### Why not just edit the settings file
+
+`PrivateMinPlayers` lives in the server-authoritative `.cxb`, so editing it there
+looks obviously right, and it was tried first and at length. **The client rejects
+an edited settings file** and drops to *"Connection to Assassin's Creed:
+Brotherhood server lost"* at the loading screen.
+
+Not for want of care. The trailer turned out to be a **CRC32 over the whole file
+with its own 40 bytes zeroed**, stored as ASCII decimal — `cxb-edit` now
+recomputes it, and restamping reproduces the shipped file byte for byte. An
+unchanged extract/replace round-trip is byte-identical, so the compressor is
+bit-compatible and section sizes update correctly. A single mode changed by one
+byte with a valid checksum is *still* refused. Something beyond the checksum is
+validated, and it has not been identified.
+
+---
+
 ## Networking
 
 Because the server binds the literal IP it advertises, **port forwarding a public IP does not work** — you cannot bind an address that lives on your router.
@@ -115,6 +166,9 @@ Ports: **TCP 80**, **UDP 21030–21031**. Scope firewall rules to the virtual LA
 | `tools/acb-launcher.ps1` | CLI launcher; starts the server, applies window style and match rules |
 | `tools/cxb-edit` | Read and write sections of the served `gamesettings` `.cxb` |
 | `tools/ability_rules.py` | Retune ability cooldowns, durations, radii and speeds |
+| `tools/solo-launch-patch.py` | Let a private lobby start with one player (one byte in `ACBMP.exe`) |
+| `tools/lobby_rules.py` | Read/write the per-mode player-count gates in the `.cxb` |
+| `tools/skills-editor.ps1` | Edit and unlock every ability from one screen |
 | `tools/anvil-reflect` | Dump AnvilToolkit signatures when a write path is needed |
 | `tools/add-player.ps1` | Create an account with a random password |
 | `tools/rename-player.ps1` | Rename an account (this is the in-game name) |
@@ -785,7 +839,8 @@ machine — that is inherent to driving a game through synthetic input.
 
 Findings from testing, recorded so nobody repeats the work.
 
-- **Ability tuning, player counts and map rotation are locked** behind the `.cxb` encoding. The container format *is* solved: 28 sections, 40-byte header records of 32-byte name plus 8-byte ASCII size, payloads stored sequentially from offset 1192, and a trailer reporting 93,684 bytes uncompressed against 57,292 stored (~61%). The **per-section payload codec is not solved** — roughly 200 LZSS parameter combinations each decode exactly 33 correct bytes and then fail, which suggests a preset dictionary or a bespoke scheme. `tools/cxb_tool.py` parses the container if you want to continue this. **Tested against AnvilToolkit 1.3.6 and rejected** — the `.cxb` is not an Anvil `.data` container, and offering it as one produces no output at all. AnvilToolkit's own symbols (`tag_dictionary.tdct`, `ZstandardDictionary`, `GetDecompressionDictionary`) show Anvil resources use *dictionary-based* tokenised XML — which is why zlib, all six LZO variants, zstd and LZSS all fail: the back-references resolve into a dictionary that is not present in the file.
+- **The `.cxb` is solved for reading and writing — but the client rejects an edited one.** This entry used to say the per-section payload codec was unsolved. It is not: `tools/cxb-edit` extracts and replaces any of the 28 sections, and an unchanged round-trip is byte-identical, so its compressor is bit-compatible with the shipped file. The trailer is a **CRC32 over the whole file with its own 40 bytes zeroed**, written as ASCII decimal, and restamping it reproduces the original exactly. Despite all of that, a single mode changed by one byte with a valid checksum is still refused by the client, which fails at the loading screen with "Connection to Assassin's Creed: Brotherhood server lost". **Something beyond the checksum is validated and has not been identified.** So the container is editable and the edits are not usable — retuning abilities, player counts and map rotation through this file all hit the same wall. Solo launch was reached by patching the client instead; see [Playing alone](#playing-alone).
+- **The party roster is local client state — the server cannot populate it.** Faking a full lobby was attempted thoroughly: slot padding, fabricated joins, `GameSession/InviteAccepted`, and all four `Participation` subtypes. The client ACKed all 40 notifications with zero resends and acted on none of them. Across a whole lobby session it calls `CreateSession`, `AddParticipants`, `RegisterURLs`, `UpdateSession` and `Abandon`, and **never once asks who is in the session**. Bots can be made to appear ONLINE and accept invites — the server builds a real 9-participant session — and the client still shows empty slots. No server-side message changes this.
 - **`.forge` modding does work.** AnvilToolkit unpacks the multiplayer archives, including `multi/DataPC_skins_*_dlc.forge`, into typed resources. That is the viable route for personas, armour and textures — but every player needs identical files, since gameplay is peer-to-peer.
 - **Challenges cannot be completed *from the server*.** The challenges screen makes **zero** server requests, so progress is entirely client-side and no server change can affect it. Whether it can be reached locally depends on the save container codec, which is unsolved.
 - **Stats do not persist.** `HermesPlayerStatisticsService` method 2 (write) discards everything it receives, and reads return hardcoded constants.

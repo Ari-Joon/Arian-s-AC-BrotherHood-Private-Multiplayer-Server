@@ -49,6 +49,33 @@ ABILITY_RE = re.compile(rb'<(Ability\w+) memberName')
 UNLOCK_RE = re.compile(rb'(<UnlockConditionLevel memberName="UnlockConditionRef">\s*<Level value=")(\d+)(")')
 
 
+# UPlay rewards (Code="unlockHARLEQUIN") and DLC gates (Code="DLC2") are
+# different condition CLASSES, so setting a level does nothing to them - they
+# have to be replaced by a level condition. The UPlay service is decommissioned,
+# which makes those items permanently unobtainable by design rather than by
+# choice; DLC gates only matter for content the player already owns.
+UPLAY_RE = re.compile(rb'<UnlockConditionUPlay memberName="UnlockConditionRef">\s*<Code value="[^"]*"\s*/>\s*</UnlockConditionUPlay>')
+DLC_RE   = re.compile(rb'<UnlockConditionDLC memberName="UnlockConditionRef">\s*<Code value="[^"]*"\s*/>\s*</UnlockConditionDLC>')
+LEVEL_ONE = (b'<UnlockConditionLevel memberName="UnlockConditionRef">'
+             + bytes([13, 10])
+             + b'<Level value="1"/>'
+             + bytes([13, 10])
+             + b'</UnlockConditionLevel>')
+
+
+def unlock_gated(data):
+    """Replace UPlay and DLC gates with a level-1 condition."""
+    n = [0]
+
+    def repl(m):
+        n[0] += 1
+        return LEVEL_ONE
+
+    data = UPLAY_RE.sub(repl, data)
+    data = DLC_RE.sub(repl, data)
+    return data, n[0]
+
+
 def unlock_all(data, level=1):
     """Set every unlock level to `level`. Returns (data, how_many_changed)."""
     changed = [0]
@@ -175,7 +202,9 @@ def main():
     ap.add_argument("--dump-json", action="store_true",
                     help="describe abilities and tunables as JSON, then exit")
     ap.add_argument("--unlock-all", nargs="?", const=1, type=int, metavar="LEVEL",
-                    help="set every ability's unlock level to LEVEL (default 1)")
+                    help="set every unlock level in the file to LEVEL (default 1)")
+    ap.add_argument("--unlock-gated", action="store_true",
+                    help="also replace UPlay-reward and DLC gates with level 1")
     a = ap.parse_args()
 
     data = open(a.xml, "rb").read()
@@ -204,14 +233,17 @@ def main():
             sys.exit("%s is not tunable; try one of: %s" % (param, ", ".join(TUNABLE)))
         sets[(cls, param)] = value
 
-    if not scale and not sets and a.unlock_all is None:
-        sys.exit("nothing to do - pass --scale-cooldowns, --set, --unlock-all, or --show")
+    if not scale and not sets and a.unlock_all is None and not a.unlock_gated:
+        sys.exit("nothing to do - pass --scale-cooldowns, --set, --unlock-all, "
+                 "--unlock-gated, or --show")
 
     out, changed = apply_rules(data, scale, sets) if (scale or sets) else (data, 0)
 
-    unlocked = 0
+    unlocked = gated = 0
     if a.unlock_all is not None:
         out, unlocked = unlock_all(out, a.unlock_all)
+    if a.unlock_gated:
+        out, gated = unlock_gated(out)
 
     # A rule that matched nothing is a typo, not a no-op. Say so rather than
     # writing an unchanged file and reporting success.
@@ -221,6 +253,8 @@ def main():
     open(a.out or a.xml, "wb").write(out)
     if unlocked:
         print("  %d unlock level(s) set to %d" % (unlocked, a.unlock_all))
+    if gated:
+        print("  %d UPlay/DLC gate(s) replaced with level 1" % gated)
     print("  %d ability block(s) changed" % changed)
     print("  %d bytes in, %d bytes out" % (len(data), len(out)))
     print("  wrote %s" % (a.out or a.xml))
