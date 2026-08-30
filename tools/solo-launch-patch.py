@@ -93,10 +93,17 @@ def main():
         return 0
 
     if a.revert:
-        if not os.path.isfile(backup):
-            raise SystemExit("  no .vanilla backup to restore from")
-        shutil.copy2(backup, a.exe)
-        print("  reverted to the stock executable")
+        # Restore ONLY this string, rather than copying the .vanilla backup
+        # over the whole file. Both patch tools share one backup, so a
+        # whole-file restore here would silently undo multi-instance-patch
+        # too - the same trap as -ResetRules reverting the whole .cxb.
+        if st == 'vanilla':
+            print("  already stock - nothing to do")
+            return 0
+        off = find_one(data, PATCHED)
+        data[off:off + len(PATCHED)] = NAME
+        open(a.exe, 'wb').write(data)
+        print("  reverted: private lobbies use the shipped minimums again")
         return 0
 
     if st == 'patched':
