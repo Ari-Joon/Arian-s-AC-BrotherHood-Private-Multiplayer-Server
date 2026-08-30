@@ -20,6 +20,7 @@ the client's roster is local state.
 Operates on one section's XML as extracted by cxb-edit.
 """
 import argparse
+import codecs
 import re
 import sys
 
@@ -33,7 +34,31 @@ RE_NAME = re.compile(r'<GameMode\s+Name="([^"]*)"')
 
 
 def read(path):
-    return open(path, encoding='utf-8-sig').read()
+    """Return (text, bom, encoding) without altering a single byte we rewrite.
+
+    Two ways this file has already been corrupted silently, both of which the
+    container repacks happily and cxb-edit's own verify accepts, and both of
+    which make the game drop its connection at the loading screen:
+
+      newline=''   without it, universal-newline translation rewrites every
+                   CRLF as LF and the section loses a byte per line - 94 on a
+                   change that swaps single digits for single digits.
+      utf-8-sig    tolerant on read, but on WRITE it always prepends a BOM.
+                   These sections ship without one, so writing added 3 bytes.
+
+    So: detect the BOM, strip it for editing, and put back exactly what was
+    there.
+    """
+    raw = open(path, 'rb').read()
+    bom = b''
+    if raw.startswith(codecs.BOM_UTF8):
+        bom, raw = raw[:3], raw[3:]
+    return raw.decode('utf-8'), bom
+
+
+def write(path, text, bom):
+    with open(path, 'wb') as fh:
+        fh.write(bom + text.encode('utf-8'))
 
 
 def report(text):
@@ -55,7 +80,7 @@ def main():
     ap.add_argument('--show', action='store_true')
     a = ap.parse_args()
 
-    text = read(a.xml)
+    text, bom = read(a.xml)
     before = report(text)
 
     if a.show or (a.private_min is None and a.min is None):
@@ -79,7 +104,7 @@ def main():
         print(f"  {before['name']:<16} already at those values")
         return 0
 
-    open(a.xml, 'w', encoding='utf-8-sig', newline='').write(text)
+    write(a.xml, text, bom)
     print(f"  {before['name']:<16} min {before['min']}->{after['min']}  "
           f"private_min {before['private_min']}->{after['private_min']}")
     return 0
