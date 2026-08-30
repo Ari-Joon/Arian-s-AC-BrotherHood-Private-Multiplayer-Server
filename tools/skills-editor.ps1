@@ -1,4 +1,4 @@
-<#
+﻿<#
   Edit every ability the game has, from one screen.
 
   WHAT THIS IS EDITING. abilitymanagermulti inside the gamesettings .cxb the
@@ -167,8 +167,16 @@ $saveBtn.FlatAppearance.BorderSize = 0
 
 $resetBtn.Add_Click({
     if (-not (Test-Path $bak)) { $status.Text = "no backup to restore"; return }
-    Copy-Item $bak $Cxb -Force
-    $status.Text = "shipped rules restored - reopen to see the original values"
+    # Restore ONLY the abilities section. Copying the whole file back also
+    # reverted every other section - including the private-lobby minimum
+    # players - with nothing on screen saying so.
+    $pe = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    & dotnet run --project $cxbEdit --no-build -- extract $bak abilitymanagermulti $work 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        & dotnet run --project $cxbEdit --no-build -- replace $Cxb abilitymanagermulti $work 2>&1 | Out-Null
+    }
+    $ErrorActionPreference = $pe
+    $status.Text = "shipped abilities restored - reopen to see the original values"
     $status.ForeColor = [Drawing.Color]::FromArgb(120,200,120)
 })
 

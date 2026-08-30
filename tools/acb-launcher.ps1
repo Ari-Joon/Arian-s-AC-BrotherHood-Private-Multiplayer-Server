@@ -42,6 +42,12 @@ param(
     # Precise overrides, repeatable: -AbilityRule AbilitySmokeBomb:Radius=8.0
     [string[]]$AbilityRule,
 
+    # Minimum players a PRIVATE lobby needs before LAUNCH goes live.
+    # Shipped as 2-4 depending on mode, which is why a lobby of one will
+    # not start. Re-applied on every host launch rather than once, because
+    # -ResetRules used to restore the whole .cxb and silently undid it.
+    [int]$PrivateMinPlayers = 1,
+
     # Put the shipped rules back.
     [switch]$ResetRules,
 
@@ -136,8 +142,20 @@ if (-not $isHost -and ($ResetRules -or $CooldownScale -or $DurationScale -or $Ab
 }
 elseif ($ResetRules) {
     if (Test-Path $bak) {
-        Copy-Item $bak $cxb -Force
-        Write-Host "Match rules reset to the shipped values." -ForegroundColor Cyan
+        # Restore ONLY the abilities section. This used to copy the whole
+        # file back, which also reverted every other section - map, mode and
+        # lobby settings included - with no message saying so. The settings
+        # screen passes -ResetRules whenever cooldown and duration are both
+        # left on default, so that fired on essentially every launch.
+        $rx = Join-Path $env:TEMP "acb-reset.xml"
+        $ce = Join-Path $root "tools\cxb-edit"
+        $pe = $ErrorActionPreference; $ErrorActionPreference ='Continue'
+        & dotnet run --project $ce --no-build -- extract $bak abilitymanagermulti $rx 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            & dotnet run --project $ce --no-build -- replace $cxb abilitymanagermulti $rx 2>&1 | Out-Null
+        }
+        $ErrorActionPreference = $pe
+        Write-Host "Ability rules reset to the shipped values." -ForegroundColor Cyan
     } else {
         Write-Host "No backup at $bak - rules were never changed." -ForegroundColor DarkGray
     }
@@ -188,6 +206,40 @@ elseif ($CooldownScale -or $DurationScale -or $AbilityRule) {
         Write-Host "  the shipped rules are still in place." -ForegroundColor DarkGray
     }
     finally { $ErrorActionPreference = $prevEAP }
+}
+
+# --- private lobby minimum players ------------------------------------------
+# "There are not enough members in your group to play this mode in a PRIVATE
+# session" is data, not code: every mode carries PrivateMinPlayers, shipped as
+# 2-4. The .cxb is server-authoritative, so lowering it here lets the host
+# start a lobby alone without anyone patching or installing anything.
+#
+# Applied on EVERY host launch, not once. An earlier one-off edit was undone
+# silently the next time the settings screen passed -ResetRules.
+if ($isHost -and $PrivateMinPlayers -gt 0 -and (Test-Path $cxb)) {
+    $lobby   = Join-Path $root "tools\lobby_rules.py"
+    $cxbEdit = Join-Path $root "tools\cxb-edit"
+    $lx      = Join-Path $env:TEMP "acb-lobby.xml"
+    $modes = @("advteamwanted","advwanted","assassinate","catsmice",
+               "pacman","teamvip","teamwanted","wanted_2")
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $changed = 0; $failed = @()
+    foreach ($m in $modes) {
+        & dotnet run --project $cxbEdit --no-build -- extract $cxb "gamemode_$m" $lx 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { $failed += $m; continue }
+        $out = & python $lobby --xml $lx --private-min $PrivateMinPlayers --min $PrivateMinPlayers 2>&1
+        if ($LASTEXITCODE -ne 0) { $failed += $m; continue }
+        if ($out -match "already at those values") { continue }
+        & dotnet run --project $cxbEdit --no-build -- replace $cxb "gamemode_$m" $lx 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { $failed += $m } else { $changed++ }
+    }
+    $ErrorActionPreference = $prevEAP
+    if ($changed) {
+        Write-Host "Private lobbies can start with $PrivateMinPlayers player(s) ($changed mode(s) set)." -ForegroundColor Cyan
+    }
+    if ($failed.Count) {
+        Write-Warning "Lobby minimum NOT set for: $($failed -join ', ')"
+    }
 }
 
 if ($RulesOnly) {
