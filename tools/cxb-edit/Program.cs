@@ -1,4 +1,4 @@
-// Read and WRITE the gamesettings .cxb the server hands to clients.
+﻿// Read and WRITE the gamesettings .cxb the server hands to clients.
 //
 // WHY THIS MATTERS
 // QuazalWV's PersistentStoreService serves this exact file:
@@ -63,6 +63,40 @@ class Program
 
     static Type cfdT, gameT;
     static object game;
+
+    // The trailer record is a CRC32 over the WHOLE file with the trailer's own
+    // 40 bytes zeroed, written back as ASCII decimal and NUL-padded. Verified
+    // against the shipped file: zeroing those bytes and recomputing reproduces
+    // 781866825, and restamping rebuilds the original byte for byte.
+    //
+    // This was the "one unknown" noted at the top of this file, and it is
+    // exactly what it was feared to be. Until it was recomputed EVERY edit
+    // produced a file the game rejected: the client fetches the settings,
+    // fails the check and reports "Connection to Assassin's Creed: Brotherhood
+    // server lost." at the loading screen. Nothing on the server side shows an
+    // error, because nothing on the server side is wrong.
+    static uint Crc32(byte[] d)
+    {
+        uint[] table = new uint[256];
+        for (uint i = 0; i < 256; i++)
+        {
+            uint c = i;
+            for (int k = 0; k < 8; k++) c = (c & 1) != 0 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+            table[i] = c;
+        }
+        uint crc = 0xFFFFFFFFu;
+        foreach (byte b in d) crc = table[(crc ^ b) & 0xFF] ^ (crc >> 8);
+        return crc ^ 0xFFFFFFFFu;
+    }
+
+    // Zero the trailer, checksum, and write the result back into it.
+    static void StampTrailer(byte[] built, int headerEnd)
+    {
+        for (int i = 0; i < REC; i++) built[headerEnd + i] = 0;
+        uint crc = Crc32(built);
+        var ascii = Encoding.ASCII.GetBytes(crc.ToString());
+        Array.Copy(ascii, 0, built, headerEnd, ascii.Length);
+    }
 
     static List<Section> Parse(byte[] d, out int headerEnd, out byte[] trailer)
     {
@@ -237,6 +271,10 @@ class Program
                 }
                 built = ms.ToArray();
             }
+
+            // Must happen before the verify below, so what is checked is what
+            // gets written.
+            StampTrailer(built, headerEnd);
 
             // Re-parse what we built and inflate the edited section back out of
             // it. This file is served to every client that connects, so a
