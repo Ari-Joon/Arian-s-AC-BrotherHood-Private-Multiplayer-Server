@@ -49,6 +49,7 @@
   EnumDisplaySettings instead, which does not require DPI awareness.
 #>
 $ErrorActionPreference = 'Stop'
+$GamePath = $env:ACB_GAMEPATH
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
@@ -59,7 +60,47 @@ $db       = Join-Path $server "database.sqlite"
 $launcher = Join-Path $PSScriptRoot "acb-launcher.ps1"
 $cfgPath  = Join-Path $PSScriptRoot "settings.json"
 $savedIni = Join-Path $env:USERPROFILE "Saved Games\Assassin's Creed Brotherhood\ACBrotherhood.ini"
-$game     = "C:\Program Files (x86)\Steam\steamapps\common\Assassins Creed Brotherhood"
+
+# --- find the game, wherever Steam put it -----------------------------------
+# Hardcoding C:\Program Files (x86)\Steam breaks for anyone with a second
+# library drive, which is most people. Steam records every library in
+# libraryfolders.vdf; app 48190 is Brotherhood.
+function Find-GamePath {
+    param([string]$Override)
+    if ($Override -and (Test-Path (Join-Path $Override "ACBMP.exe"))) { return $Override }
+
+    $steam = $null
+    foreach ($k in 'HKCU:\SOFTWARE\Valve\Steam','HKLM:\SOFTWARE\WOW6432Node\Valve\Steam') {
+        try {
+            $v = (Get-ItemProperty -Path $k -ErrorAction Stop)
+            $steam = if ($v.SteamPath) { $v.SteamPath } else { $v.InstallPath }
+            if ($steam) { break }
+        } catch { }
+    }
+    $roots = @()
+    if ($steam) {
+        $roots += $steam
+        $vdf = Join-Path $steam "steamapps\libraryfolders.vdf"
+        if (Test-Path $vdf) {
+            foreach ($m in [regex]::Matches((Get-Content $vdf -Raw), '"path"\s+"([^"]+)"')) {
+                $roots += $m.Groups[1].Value -replace '\\','\'
+            }
+        }
+    }
+    $roots += 'C:\Program Files (x86)\Steam'
+    foreach ($r in ($roots | Select-Object -Unique)) {
+        $p = Join-Path $r "steamapps\common\Assassins Creed Brotherhood"
+        if (Test-Path (Join-Path $p "ACBMP.exe")) { return $p }
+    }
+    return $null
+}
+
+$game = Find-GamePath $GamePath
+if (-not $game) {
+    Write-Host "Could not find Assassins Creed Brotherhood." -ForegroundColor Red
+    Write-Host 'Pass -GamePath "D:\SteamLibrary\steamapps\common\Assassins Creed Brotherhood"' -ForegroundColor Red
+    exit 1
+}
 
 # --- palette -----------------------------------------------------------------
 $cBg       = [Drawing.Color]::FromArgb(22, 22, 26)

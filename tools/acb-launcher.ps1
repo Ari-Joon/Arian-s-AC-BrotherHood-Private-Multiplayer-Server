@@ -1,4 +1,4 @@
-<#
+﻿<#
   AC Brotherhood private-server launcher / mod manager.
 
   Starts the Rendez-Vous server if needed, launches the multiplayer client with
@@ -29,6 +29,7 @@ param(
     [ValidateSet('default','on','off')] [string]$AtlasMips = 'default',
     [ValidateSet('default','on','off')] [string]$AmbientOcclusion = 'default',
     [int]$FarDist = 0,
+    [string]$GamePath,
 
     # --- match rules ---------------------------------------------------------
     # These edit the gamesettings the SERVER hands to clients, so they apply to
@@ -51,7 +52,47 @@ param(
 $ErrorActionPreference = 'Stop'
 $root   = Split-Path $PSScriptRoot -Parent
 $server = Join-Path $root "ACB RDV\bin\x86\Release"
-$game   = "C:\Program Files (x86)\Steam\steamapps\common\Assassins Creed Brotherhood"
+
+# --- find the game, wherever Steam put it -----------------------------------
+# Hardcoding C:\Program Files (x86)\Steam breaks for anyone with a second
+# library drive, which is most people. Steam records every library in
+# libraryfolders.vdf; app 48190 is Brotherhood.
+function Find-GamePath {
+    param([string]$Override)
+    if ($Override -and (Test-Path (Join-Path $Override "ACBMP.exe"))) { return $Override }
+
+    $steam = $null
+    foreach ($k in 'HKCU:\SOFTWARE\Valve\Steam','HKLM:\SOFTWARE\WOW6432Node\Valve\Steam') {
+        try {
+            $v = (Get-ItemProperty -Path $k -ErrorAction Stop)
+            $steam = if ($v.SteamPath) { $v.SteamPath } else { $v.InstallPath }
+            if ($steam) { break }
+        } catch { }
+    }
+    $roots = @()
+    if ($steam) {
+        $roots += $steam
+        $vdf = Join-Path $steam "steamapps\libraryfolders.vdf"
+        if (Test-Path $vdf) {
+            foreach ($m in [regex]::Matches((Get-Content $vdf -Raw), '"path"\s+"([^"]+)"')) {
+                $roots += $m.Groups[1].Value -replace '\\','\'
+            }
+        }
+    }
+    $roots += 'C:\Program Files (x86)\Steam'
+    foreach ($r in ($roots | Select-Object -Unique)) {
+        $p = Join-Path $r "steamapps\common\Assassins Creed Brotherhood"
+        if (Test-Path (Join-Path $p "ACBMP.exe")) { return $p }
+    }
+    return $null
+}
+
+$game = Find-GamePath $GamePath
+if (-not $game) {
+    Write-Host "Could not find Assassins Creed Brotherhood." -ForegroundColor Red
+    Write-Host 'Pass -GamePath "D:\SteamLibrary\steamapps\common\Assassins Creed Brotherhood"' -ForegroundColor Red
+    exit 1
+}
 $db     = Join-Path $server "database.sqlite"
 
 # --- credentials: default to the first real account in the database ----------
