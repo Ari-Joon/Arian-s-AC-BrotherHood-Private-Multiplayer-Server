@@ -46,7 +46,7 @@ param(
     # Shipped as 2-4 depending on mode, which is why a lobby of one will
     # not start. Re-applied on every host launch rather than once, because
     # -ResetRules used to restore the whole .cxb and silently undid it.
-    [int]$PrivateMinPlayers = 1,
+    [int]$PrivateMinPlayers = 0,   # 0 = leave the shipped values alone (see below)
 
     # Put the shipped rules back.
     [switch]$ResetRules,
