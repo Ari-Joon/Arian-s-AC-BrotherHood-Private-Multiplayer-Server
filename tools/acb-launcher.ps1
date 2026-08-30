@@ -51,6 +51,22 @@ param(
     # Named without the leading slash. Anything here is appended last.
     [string[]]$Switch,
 
+    # Which XInput pad this instance reads. /userindex:%u is a real switch -
+    # the string sits in ACBMP.exe next to /username:%s /password:%s.
+    #
+    # THIS MATTERS FOR BOTS. XInput is global, so two clients on one machine
+    # both poll pad 0 by default and the second character MIRRORS the first:
+    # move your controller and the bot climbs and runs with you. It looks
+    # convincingly like the bot is reacting to you. It is not - nothing is
+    # driving it.
+    #
+    # Give each instance its own index and they stop sharing input. A bot on an
+    # index with no pad attached simply receives nothing, which is what is
+    # wanted until something is actually driving it.
+    #
+    # -1 leaves the switch off entirely (the game's default).
+    [int]$UserIndex = -1,
+
     # Print the command line that would be used, and launch nothing.
     [switch]$DryRun,
     [string]$GamePath,
@@ -349,6 +365,7 @@ if ($VramStreaming -ne 'default') {
 }
 if ($LoadOnDemand   -ne 'default') { $argv += "/loadondemand:$LoadOnDemand" }
 if ($PreloadShaders -ne 'default') { $argv += "/preloadshaders:$PreloadShaders" }
+if ($UserIndex -ge 0) { $argv += "/userindex:$UserIndex" }
 foreach ($sw in $Switch) {
     if ($sw) { $argv += "/" + $sw.TrimStart('/') }
 }
