@@ -1,4 +1,4 @@
-<#
+﻿<#
   Switch the game between VANILLA and UPSCALED textures in seconds.
 
   WHY THIS EXISTS. Without it there is no honest before/after. Comparing a
@@ -57,6 +57,16 @@ $VANILLA_SIZE = @{
     "DataPC_skins_0000_00000001_dlc.forge" = 9535488
     "DataPC_skins_0002_00000004_dlc.forge" = 138018816
 }
+
+# Forges REBUILT from pristine textures rather than restored from a Steam
+# backup. Their contents are vanilla; their size is not, because a first repack
+# adds roughly 40 MB of container overhead whatever the payload. Accepting them
+# is correct - rejecting them would mean no vanilla side for these two at all -
+# but they are listed separately so nobody mistakes them for untouched files.
+$REBUILT_VANILLA = @{
+    "DataPC.forge"               = 529530880
+    "DataPC_AC2MP_Firenze.forge" = 102400000
+}
 $forges = @($VANILLA_SIZE.Keys) + @("DataPC.forge")
 
 function Assert-Closed {
@@ -112,6 +122,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Capture') {
                 Copy-Item $bak (Join-Path $d $f) -Force; $saved++
             } elseif ($VANILLA_SIZE.ContainsKey($f) -and (Get-Item $live).Length -eq $VANILLA_SIZE[$f]) {
                 Copy-Item $live (Join-Path $d $f) -Force; $saved++
+            } elseif ($REBUILT_VANILLA.ContainsKey($f) -and (Get-Item $live).Length -eq $REBUILT_VANILLA[$f]) {
+                Copy-Item $live (Join-Path $d $f) -Force; $saved++
+                Write-Host "    $f taken from a REBUILD (vanilla contents, repacked container)" -ForegroundColor DarkGray
             } else {
                 $skipped += $f
             }
