@@ -52,6 +52,22 @@ PATCHED = NAME[:-1] + b'Z'
 # PrivateMinPlayers - rather than by a plain search that could hit any of them.
 MIN_NAME = b'MinPlayers'
 MIN_PATCHED = MIN_NAME[:-1] + b'Z'
+
+# The field that actually ends a running match. The mode definition wires it up:
+#
+#   GBrick_CheckNumberOfPlayers Start="PlayerRemoved"
+#       OnFinished="NoMoreEnoughPlayers" PlayersThreshold="4"
+#   GBrick_GameState SetEnded="TimerEnded,NoMoreEnoughPlayers"
+#
+# So the match ends when the player count drops below PlayersThreshold - NOT
+# below MinPlayers, which is why neutralising MinPlayers changed nothing and a
+# two-player match still died after about two minutes. GBrick_Timer in the same
+# definition gives the real match length: GameDuration="600".
+#
+# Occurs exactly once in the executable, in an attribute table beside
+# SendEventWhileInGame and PlayerPerTeamThreshold.
+THRESH_NAME = b'PlayersThreshold'
+THRESH_PATCHED = THRESH_NAME[:-1] + b'Z'
 DEFAULT_EXE = (r"C:\Program Files (x86)\Steam\steamapps\common"
                r"\Assassins Creed Brotherhood\ACBMP.exe")
 
@@ -104,6 +120,11 @@ def main():
     ap.add_argument('--apply', action='store_true')
     ap.add_argument('--revert', action='store_true')
     ap.add_argument('--status', action='store_true')
+    ap.add_argument('--also-players-threshold', action='store_true',
+                    help='stop a running match ending when the player count '
+                         'drops below PlayersThreshold (shipped as 4). This is '
+                         'the field that ends a two-player match; --also-min-'
+                         'players is NOT and is kept only for reversion.')
     ap.add_argument('--also-min-players', action='store_true',
                     help='also neutralise MinPlayers, so a match does not end when '
                          'the other player dies and leaves. UNVERIFIED: the default '
@@ -124,6 +145,12 @@ def main():
     if msite is not None:
         mstate = 'patched' if data[msite:msite + len(MIN_NAME)] == MIN_PATCHED else 'vanilla'
         print(f"  MinPlayers at 0x{msite:X}: {mstate}")
+    tsite = find_one(data, THRESH_NAME)
+    if tsite is None:
+        tsite = find_one(data, THRESH_PATCHED)
+    if tsite is not None:
+        tstate = 'patched' if data[tsite:tsite + len(THRESH_NAME)] == THRESH_PATCHED else 'vanilla'
+        print(f"  PlayersThreshold at 0x{tsite:X}: {tstate}")
 
     if a.status or not (a.apply or a.revert):
         if st == 'unknown':
@@ -144,11 +171,14 @@ def main():
         if msite is not None and data[msite:msite + len(MIN_NAME)] == MIN_PATCHED:
             data[msite:msite + len(MIN_NAME)] = MIN_NAME
             print("  reverted MinPlayers too")
+        if tsite is not None and data[tsite:tsite + len(THRESH_NAME)] == THRESH_PATCHED:
+            data[tsite:tsite + len(THRESH_NAME)] = THRESH_NAME
+            print("  reverted PlayersThreshold too")
         open(a.exe, 'wb').write(data)
         print("  reverted: private lobbies use the shipped minimums again")
         return 0
 
-    if st == 'patched' and not a.also_min_players:
+    if st == 'patched' and not (a.also_min_players or a.also_players_threshold):
         print("  already patched - nothing to do")
         return 0
     if st == 'unknown':
@@ -175,6 +205,14 @@ def main():
         else:
             data[msite:msite + len(MIN_NAME)] = MIN_PATCHED
             print(f"  patched at 0x{msite:X}: {MIN_NAME.decode()} -> {MIN_PATCHED.decode()}")
+    if a.also_players_threshold:
+        if tsite is None:
+            raise SystemExit("  PlayersThreshold not found - refusing")
+        if data[tsite:tsite + len(THRESH_NAME)] == THRESH_PATCHED:
+            print("  PlayersThreshold already patched")
+        else:
+            data[tsite:tsite + len(THRESH_NAME)] = THRESH_PATCHED
+            print(f"  patched at 0x{tsite:X}: {THRESH_NAME.decode()} -> {THRESH_PATCHED.decode()}")
     open(a.exe, 'wb').write(data)
     print("  private lobbies can now start with one player")
     return 0
