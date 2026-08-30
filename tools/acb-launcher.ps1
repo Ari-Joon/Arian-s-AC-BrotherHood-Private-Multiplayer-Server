@@ -227,7 +227,11 @@ if ($isHost -and $PrivateMinPlayers -gt 0 -and (Test-Path $cxb)) {
     foreach ($m in $modes) {
         & dotnet run --project $cxbEdit --no-build -- extract $cxb "gamemode_$m" $lx 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { $failed += $m; continue }
-        $out = & python $lobby --xml $lx --private-min $PrivateMinPlayers --min $PrivateMinPlayers 2>&1
+        # ONLY PrivateMinPlayers. MinPlayers governs public matchmaking and is
+        # not the gate on a private lobby; lowering it too was unnecessary, and
+        # the client dropped its connection at the loading screen while it was
+        # set to 1. Change one thing at a time.
+        $out = & python $lobby --xml $lx --private-min $PrivateMinPlayers 2>&1
         if ($LASTEXITCODE -ne 0) { $failed += $m; continue }
         if ($out -match "already at those values") { continue }
         & dotnet run --project $cxbEdit --no-build -- replace $cxb "gamemode_$m" $lx 2>&1 | Out-Null
