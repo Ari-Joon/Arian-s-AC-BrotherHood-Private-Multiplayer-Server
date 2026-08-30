@@ -3,6 +3,40 @@
     public static class NotificationManager
     {
         /// <summary>
+        /// Tells a client that a player has JOINED its session, using the
+        /// Participation notification type.
+        ///
+        /// WHY THIS EXISTS. A private lobby will not launch below a minimum and
+        /// says "not enough members in your group". Sending
+        /// GameSession/InviteAccepted was tried and does nothing - the roster
+        /// stayed empty and LAUNCH stayed grey - and the log shows why that was
+        /// never likely: in a whole lobby session the client asks the server
+        /// CreateSession, AddParticipants, RegisterURLs, UpdateSession and
+        /// Abandon, and never once asks who is in the session. The roster is
+        /// local state.
+        ///
+        /// Participation (type 3) is the one channel the enum defines for
+        /// exactly this and that nothing in this codebase ever sends. If the
+        /// client does not act on it either, no server-side message populates
+        /// that roster and the gate is purely client-side.
+        /// </summary>
+        public static void ParticipationChanged(ClientInfo receiverClient, uint playerPid,
+                                                uint sessionId, uint subtype)
+        {
+            new NotificationEvent(
+                receiverClient,
+                0,
+                playerPid,
+                (uint)NotificationEventType.Participation,
+                subtype,
+                playerPid,
+                sessionId,
+                0,
+                ""
+                ).Send();
+        }
+
+        /// <summary>
         /// Sends a friend/invite removal/denial notification.
         /// </summary>
         /// <param name="receiverClient"></param>

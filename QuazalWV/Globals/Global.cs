@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Configuration;
 using System.Drawing;
@@ -55,6 +57,48 @@ namespace QuazalWV
         /// </summary>
         public static uint FakePartyMembers { get; set; } =
             uint.TryParse(ConfigurationManager.AppSettings["FakePartyMembers"], out var fp) ? fp : 0;
+
+        /// <summary>
+        /// Bot accounts start at this PID in the seeded database.
+        /// </summary>
+        public const uint FirstBotPid = 1003;
+
+        /// <summary>
+        /// True if this PID is one of the stand-in bots the server pretends is
+        /// online. The INVITE FRIENDS screen lists every bot as OFFLINE because
+        /// FriendsService decides online-ness by whether a client is connected,
+        /// and an offline friend cannot be invited - which is why fabricating
+        /// join notifications achieved nothing. The client has to be able to
+        /// send the invite itself.
+        ///
+        /// Deliberately NOT tied to FakePartyMembers: that controls how many
+        /// slots the server pads a session to, which is a different question
+        /// from whether a given PID is a bot account. Tying them together left
+        /// Bot6-Bot8 permanently offline whenever the pad was set below 8.
+        /// </summary>
+        /// <summary>
+        /// How many bot accounts the seeded database holds (Bot1..Bot8).
+        /// </summary>
+        public const uint BotCount = 8;
+
+        /// <summary>
+        /// Which Participation notification subtypes to fire when a stand-in bot
+        /// joins. The enum names them Notif1/2/3/8 without saying what they mean,
+        /// and nothing in this codebase ever sent one, so which (if any) the client
+        /// acts on is unknown. Kept in config so the set can be narrowed by editing
+        /// ACBRDV.exe.config and restarting, rather than rebuilding per guess.
+        /// Empty disables Participation entirely.
+        /// </summary>
+        public static uint[] ParticipationSubtypes { get; set; } =
+            (ConfigurationManager.AppSettings["ParticipationSubtypes"] ?? "1,2,3,8")
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => uint.TryParse(x, out _))
+                .Select(uint.Parse)
+                .ToArray();
+
+        public static bool IsStandInBot(uint pid) =>
+            pid >= FirstBotPid && pid < FirstBotPid + BotCount;
 
         public static uint IdCounter { get; set; } = 0x12345678;
         public static uint PidCounter { get; set; } = 0x1234;

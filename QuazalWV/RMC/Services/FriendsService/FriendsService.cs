@@ -208,11 +208,19 @@ namespace QuazalWV
                             otherPid = rel.RequesterPid == client.User.Pid ? rel.RequesteePid : rel.RequesterPid;
                             otherUser = DbHelper.GetUserByID(otherPid);
                             friendClient = Global.Clients.Find(c => c.User.Pid == otherPid);
-                            online = friendClient != null;
+                            // A stand-in bot has no connection, so it would always
+                            // read OFFLINE and the invite option would be refused
+                            // before any of this could be tested.
+                            online = friendClient != null || Global.IsStandInBot(otherPid);
                             inviteNotif = rel.Type == PlayerRelationship.Pending && otherPid == rel.RequesterPid;
                             friends.Add(new FriendData(rel, otherUser, online, inviteNotif));
                             // send 'is now online' notifs to friends
-                            if (online && rel.Type == PlayerRelationship.Friend)
+                            // friendClient MUST be non-null here. Marking stand-in
+                            // bots online made this true with no client behind it,
+                            // and the null reference threw inside the notification -
+                            // which killed the whole friends list, so nothing showed
+                            // at all rather than showing bots as offline.
+                            if (friendClient != null && rel.Type == PlayerRelationship.Friend)
                                 NotificationManager.FriendStatusChanged(friendClient, client.User.Pid, client.User.Name, true);
                         }
                         reply = new RMCPacketResponseFriendsService_GetDetailedList(friends);

@@ -101,22 +101,12 @@ namespace QuazalWV
                     reply = new RMCPacketResponseGameSessionService_CreateSession(reqCreateSes.Session.TypeId, sesId);
                     RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);
 
-                    // EXPERIMENT: fabricate party members so a solo lobby can
-                    // reach the minimum a private match demands. The gate reads
-                    // the party roster - padding session slots was tried and
-                    // did nothing - and the roster is built from notifications.
-                    // Bot PIDs start at 1003 in the seeded database.
-                    if (Global.FakePartyMembers > 0)
-                    {
-                        for (uint i = 0; i < Global.FakePartyMembers; i++)
-                        {
-                            uint fakePid = 1003 + i;
-                            if (fakePid == client.PID) continue;
-                            NotificationManager.GameInviteAccepted(client, fakePid, sesId);
-                            Log.WriteLine(1, $"Fabricated party member: told {client.PID} that PID {fakePid} " +
-                                             $"accepted into session {sesId}", LogSource.Session, Color.Orange);
-                        }
-                    }
+                    // Pushing unsolicited join notifications here was tried and
+                    // does nothing: the client never asks the server who is in a
+                    // session, and INVITE FRIENDS showed every bot OFFLINE so it
+                    // would not have invited them anyway. The working path is in
+                    // SendInvitation - make the bot appear online, let the client
+                    // invite it, then answer as a real client would.
                     break;
                 case 2:
                     var reqUpdateSes = (RMCPacketRequestGameSessionService_UpdateSession)rmc.request;
@@ -289,6 +279,35 @@ namespace QuazalWV
                         invitee = Global.Clients.Find(c => c.User.Pid == pid);
                         if (invitee != null)
                             NotificationManager.GameInviteSent(invitee, client.User.Pid, reqSendInvitation.Invitation);
+                        else if (Global.IsStandInBot(pid))
+                        {
+                            // Answer exactly as a real bot client would: join the
+                            // session, then tell the inviter it accepted. This time
+                            // the client SENT the invite, so it has local state
+                            // expecting this player - unlike the earlier attempt,
+                            // which pushed an accept for an invite that never
+                            // happened and was ignored.
+                            var ses = Global.Sessions.Find(x => x.Key.SessionId == reqSendInvitation.Invitation.Key.SessionId);
+                            if (ses != null)
+                            {
+                                var isPriv = ses.FindProp(SessionParam.IsPrivate);
+                                if (isPriv != null && isPriv.Value != 0)
+                                    ses.AddParticipants(new List<uint>(), new List<uint> { pid });
+                                else
+                                    ses.AddParticipants(new List<uint> { pid }, new List<uint>());
+                                Log.WriteLine(1, $"Stand-in bot {pid} joined session {ses.Key.SessionId} " +
+                                                 $"({ses.NbParticipants()} participants)", LogSource.Session, Color.Orange);
+                            }
+                            NotificationManager.GameInviteAccepted(client, pid, reqSendInvitation.Invitation.Key.SessionId);
+                            // GameInviteAccepted alone left the roster empty, and the
+                            // log shows the client never asks the server who is in a
+                            // session - the roster is local state. Participation is the
+                            // one notification channel defined for a player joining that
+                            // this server has never sent, so fire it too.
+                            foreach (uint sub in Global.ParticipationSubtypes)
+                                NotificationManager.ParticipationChanged(
+                                    client, pid, reqSendInvitation.Invitation.Key.SessionId, sub);
+                        }
                         else
                             DbHelper.AddGameInvites(reqSendInvitation.Invitation.Key, client.User.Pid, pid, reqSendInvitation.Invitation.Message);
                     }
