@@ -158,10 +158,13 @@ def main():
         shutil.copy2(a.exe, backup)
         print(f"  backed up to {os.path.basename(backup)}")
 
-    off = find_one(data, NAME)
-    if data[off + len(NAME)] != 0:
-        raise SystemExit("  string is not NUL-terminated where expected - refusing")
+    # Only when there is still a vanilla string to replace. With
+    # --also-min-players on an already-patched exe there is not, and looking one
+    # up unconditionally dereferenced None.
     if st == 'vanilla':
+        off = find_one(data, NAME)
+        if data[off + len(NAME)] != 0:
+            raise SystemExit("  string is not NUL-terminated where expected - refusing")
         data[off:off + len(NAME)] = PATCHED
         print(f"  patched at 0x{off:X}: {NAME.decode()} -> {PATCHED.decode()}")
     if a.also_min_players:
