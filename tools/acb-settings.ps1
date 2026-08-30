@@ -572,15 +572,21 @@ $btn.Add_Click({
            '-AtlasMips', $atlasBox.SelectedItem,
            '-AmbientOcclusion', $aoBox.SelectedItem)
     if ($far -gt 0) { $a += @('-FarDist', "$far") }
+    # A client has no database to look the password up in, so pass what
+    # client-setup.ps1 saved.
+    if (-not $isHost -and $cfg.Password) { $a += @('-Password', [string]$cfg.Password) }
 
     # Rules rebuild from the pristine backup every time, so "default" on
     # both means reset rather than scale-by-one.
-    $cdSel = [string]$cdBox.SelectedItem
-    $duSel = [string]$duBox.SelectedItem
-    if ($cdSel -eq 'default' -and $duSel -eq 'default') { $a += '-ResetRules' }
-    else {
-        if ($cdSel -ne 'default') { $a += @('-CooldownScale', $cdSel.TrimEnd('x')) }
-        if ($duSel -ne 'default') { $a += @('-DurationScale', $duSel.TrimEnd('x')) }
+    # Match rules edit the SERVER's settings file, so only the host sends them.
+    if ($isHost) {
+        $cdSel = [string]$cdBox.SelectedItem
+        $duSel = [string]$duBox.SelectedItem
+        if ($cdSel -eq 'default' -and $duSel -eq 'default') { $a += '-ResetRules' }
+        else {
+            if ($cdSel -ne 'default') { $a += @('-CooldownScale', $cdSel.TrimEnd('x')) }
+            if ($duSel -ne 'default') { $a += @('-DurationScale', $duSel.TrimEnd('x')) }
+        }
     }
 
     if ($mode -eq 'Windowed') {

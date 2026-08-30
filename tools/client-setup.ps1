@@ -1,4 +1,4 @@
-<#
+﻿<#
   One-command setup for someone JOINING a server. Not the host.
 
   Does everything a player needs and nothing they do not:
@@ -83,6 +83,10 @@ if ($User) {
         try { (Get-Content $cfgPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $cfg[$_.Name] = $_.Value } } catch {}
     }
     $cfg['User'] = $User
+    # Stored so the launcher can log in without the host's database. It is a
+    # game account on a private server and the server itself keeps these in
+    # plaintext, but it is worth knowing it lands in settings.json.
+    if ($Password) { $cfg['Password'] = $Password }
     if (-not $cfg.ContainsKey('Display')) { $cfg['Display'] = 'Borderless' }
     $cfg | ConvertTo-Json | Set-Content $cfgPath -Encoding utf8
     Ok "account '$User' saved"

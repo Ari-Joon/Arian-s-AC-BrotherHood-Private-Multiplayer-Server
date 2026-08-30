@@ -96,13 +96,31 @@ if (-not $game) {
 $db     = Join-Path $server "database.sqlite"
 
 # --- credentials: default to the first real account in the database ----------
-if (-not $User) {
-    $User = (sqlite3 "$db" "SELECT name FROM users WHERE name <> 'Tracking' ORDER BY pid LIMIT 1;")
+# HOST or CLIENT. Only the host has the server, its database, and sqlite3. A
+# joining player has none of them, so every host-only step below is guarded -
+# without that this script died before ever launching the game for them.
+$isHost = (Test-Path (Join-Path $server "ACBRDV.exe")) -and (Test-Path $db) -and
+          [bool](Get-Command sqlite3 -ErrorAction SilentlyContinue)
+
+if ($isHost) {
+    if (-not $User)     { $User     = (sqlite3 "$db" "SELECT name FROM users WHERE name <> 'Tracking' ORDER BY pid LIMIT 1;") }
+    if (-not $Password) { $Password = (sqlite3 "$db" "SELECT password FROM users WHERE name='$User';") }
+} else {
+    # Client: use whatever client-setup.ps1 saved next to this script.
+    $cfgFile = Join-Path $PSScriptRoot "settings.json"
+    if (Test-Path $cfgFile) {
+        try {
+            $saved = Get-Content $cfgFile -Raw | ConvertFrom-Json
+            if (-not $User)     { $User     = $saved.User }
+            if (-not $Password) { $Password = $saved.Password }
+        } catch { }
+    }
 }
-if (-not $Password) {
-    $Password = (sqlite3 "$db" "SELECT password FROM users WHERE name='$User';")
+if (-not $User -or -not $Password) {
+    Write-Host "No account to log in with." -ForegroundColor Red
+    Write-Host "Run: tools\client-setup.ps1 -HostIP <host> -User <name> -Password <password>" -ForegroundColor Red
+    exit 1
 }
-if (-not $User -or -not $Password) { Write-Error "Could not resolve an account from $db"; exit 1 }
 
 # --- match rules ------------------------------------------------------------
 # QuazalWV's PersistentStoreService serves gamesettings_c1380_d873_s6285.cxb
@@ -113,7 +131,10 @@ if (-not $User -or -not $Password) { Write-Error "Could not resolve an account f
 $cxb = Join-Path $server "gamesettings_c1380_d873_s6285.cxb"
 $bak = "$cxb.bak"
 
-if ($ResetRules) {
+if (-not $isHost -and ($ResetRules -or $CooldownScale -or $DurationScale -or $AbilityRule)) {
+    Write-Host "Match rules are set by the host; ignoring them here." -ForegroundColor DarkGray
+}
+elseif ($ResetRules) {
     if (Test-Path $bak) {
         Copy-Item $bak $cxb -Force
         Write-Host "Match rules reset to the shipped values." -ForegroundColor Cyan
@@ -175,7 +196,10 @@ if ($RulesOnly) {
 }
 
 # --- start the server if it isn't already up --------------------------------
-if (-not (Get-Process ACBRDV -ErrorAction SilentlyContinue)) {
+if (-not $isHost) {
+    Write-Host "Client mode - connecting to the host's server." -ForegroundColor DarkGray
+}
+elseif (-not (Get-Process ACBRDV -ErrorAction SilentlyContinue)) {
     Write-Host "Starting Rendez-Vous server..." -ForegroundColor Cyan
     Start-Process -FilePath "$server\ACBRDV.exe" -WorkingDirectory $server
     $bound = $false
