@@ -1,4 +1,4 @@
-<#
+﻿<#
   AC Brotherhood - private server launcher with a graphics settings screen.
 
   The game's own options menu is compiled into ACBMP.exe and cannot be extended,
@@ -153,12 +153,13 @@ $form                 = New-Object Windows.Forms.Form
 $form.Text            = "Assassin's Creed Brotherhood"
 # Tall enough for every section, but never taller than the screen: on a
 # 1080p display the full 1060 would put the PLAY button under the taskbar.
+$form.MinimumSize = New-Object Drawing.Size(496, 420)
 $wantH = 1060
 $availH = [int]([Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 60)
 $form.ClientSize      = New-Object Drawing.Size(470, ([Math]::Min($wantH, $availH)))
 $form.StartPosition   = 'CenterScreen'
-$form.FormBorderStyle = 'FixedSingle'
-$form.MaximizeBox     = $false
+$form.FormBorderStyle = 'Sizable'
+$form.MaximizeBox     = $true
 $form.AutoScaleMode   = 'None'      # explicit coordinates; no font-based reflow
 $form.BackColor       = $cBg
 $form.ForeColor       = $cText
@@ -520,7 +521,39 @@ foreach ($c in @($form.Controls | Where-Object { $_ -ne $bottom })) {
     $form.Controls.Remove($c)
     $scroll.Controls.Add($c)
 }
-# Added last so Fill takes the space the docked strip leaves.
 $form.Controls.Add($scroll)
+
+# Z-ORDER, not add-order, decides docking. A Dock=Fill control added AFTER a
+# Dock=Bottom one claims the whole client area and the two overlap: the PLAY
+# strip sits on top of the content, and the scrolling region continues beneath
+# it, so the last rows can never be reached however far you scroll. Forcing the
+# z-order is the fix that does not depend on which order things were created in.
+$scroll.SendToBack()
+$bottom.BringToFront()
+
+# AutoScroll sizes itself from child bounds, but the children were moved in
+# after the panel existed, so tell it explicitly how tall the content is.
+$contentBottom = 0
+foreach ($c in $scroll.Controls) {
+    $b = $c.Bottom
+    if ($b -gt $contentBottom) { $contentBottom = $b }
+}
+$scroll.AutoScrollMinSize = New-Object Drawing.Size(0, ($contentBottom + 16))
+
+# A WinForms Panel is not selectable, so it never takes keyboard focus and the
+# wheel messages go to whatever does. The scrollbar appears and nothing moves,
+# which looks like a broken window rather than a focus problem. Forward the
+# wheel from the panel and from every child to the panel's scroll position.
+$wheel = {
+    param($sender, $e)
+    $y = [Math]::Abs($scroll.AutoScrollPosition.Y) - $e.Delta
+    if ($y -lt 0) { $y = 0 }
+    $scroll.AutoScrollPosition = New-Object Drawing.Point(0, $y)
+}
+$scroll.Add_MouseWheel($wheel)
+foreach ($c in $scroll.Controls) {
+    $c.Add_MouseWheel($wheel)
+    foreach ($gc in $c.Controls) { $gc.Add_MouseWheel($wheel) }
+}
 
 [void]$form.ShowDialog()
