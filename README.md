@@ -786,6 +786,47 @@ and HUD scale has not been done. Everything above that boundary is tested; below
 it, nothing is. A bot that hallucinates contacts is worse than one that stands
 still, so it returns nothing rather than guessing.
 
+### Getting a real bot client into a match — what actually works
+
+A bot here is a real game client with its own account. Two things had to be
+solved before one could reach a live match, and both are done:
+
+**More than one client per Windows session.** `ACBMP.exe` holds a named
+semaphore and a second instance exits cleanly after ~5s. `tools/multi-instance-patch.py`
+flips the conditional. Raising the semaphore counts does nothing — the check is
+on `ERROR_ALREADY_EXISTS` from the name, not on acquiring a slot.
+
+**Invitations have to be stored.** `SendInvitation` used to write to the
+database only when the invitee was OFFLINE, but `GetInvitationsReceived` reads
+from the database — so an invited player who was online had nothing to accept.
+Invites are now persisted whatever the connection state, and cleared on accept
+and decline.
+
+**INVITE MID-GAME, NOT FROM THE LOBBY.** This is the part that matters and it is
+not obvious. A bot has no input, so every screen needing a button press is a wall:
+
+| Route | What happens |
+|---|---|
+| Lobby invite | accept → lobby → ready → **loadout** → **character select** → stalls, and the match never starts |
+| Mid-game invite | joins a running match, loadout and character **auto-assigned**, spawns into the world |
+
+So: launch the match solo first (see [Playing alone](#playing-alone)), then invite
+the bot from inside the match. Confirmed working — the bot loaded in and held a
+slot in a live match. The one run that succeeded was a mid-game invite; every
+lobby invite died on the loadout screen.
+
+**Presence needs no input at all**, which is what ability challenges require.
+Input is only needed to make a bot *move*, and that is a separate problem:
+`warm-body.ps1` injects keyboard scancodes, which reach only the focused window,
+so driving a bot would steal focus from the player. ViGEmBus is installed on this
+machine, and a virtual gamepad is the likely way round it, since XInput is often
+polled regardless of focus. Untested.
+
+**Open question.** A bot left a live match after ~106s and ~126s in two runs, both
+times shortly after being interacted with. Idle kick and interaction desync both
+fit; they need different fixes, so it is recorded as unresolved rather than
+guessed at.
+
 ### Warm bodies — `warm-body.ps1`
 
 **Putting a body in a match needs no perception at all.** Ability challenges

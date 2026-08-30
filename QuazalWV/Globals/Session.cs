@@ -31,10 +31,23 @@ namespace QuazalWV
             HostUrls = new List<StationUrl>(host.Urls);
         }
 
+        /// <summary>
+        /// Add participants, ignoring any that are already in the session.
+        ///
+        /// A player who joins by accepting an invitation gets added TWICE: once by
+        /// AcceptInvitation, which guards against duplicates, and again by the
+        /// host's AddParticipants, which did not. A two-player match then reported
+        /// three participants, and the slot count is what decides whether a lobby
+        /// looks full and how many players a match believes it has.
+        /// </summary>
         public void AddParticipants(List<uint> publicPids, List<uint> privatePids)
         {
-            PublicPids.AddRange(publicPids);
-            PrivatePids.AddRange(privatePids);
+            foreach (uint pid in publicPids)
+                if (!PublicPids.Contains(pid) && !PrivatePids.Contains(pid))
+                    PublicPids.Add(pid);
+            foreach (uint pid in privatePids)
+                if (!PrivatePids.Contains(pid) && !PublicPids.Contains(pid))
+                    PrivatePids.Add(pid);
             UpdateCurrentSlots();
         }
 
