@@ -289,35 +289,14 @@ namespace QuazalWV
                                                 reqSendInvitation.Invitation.Message);
                         if (invitee != null)
                             NotificationManager.GameInviteSent(invitee, client.User.Pid, reqSendInvitation.Invitation);
-                        else if (Global.IsStandInBot(pid))
-                        {
-                            // Answer exactly as a real bot client would: join the
-                            // session, then tell the inviter it accepted. This time
-                            // the client SENT the invite, so it has local state
-                            // expecting this player - unlike the earlier attempt,
-                            // which pushed an accept for an invite that never
-                            // happened and was ignored.
-                            var ses = Global.Sessions.Find(x => x.Key.SessionId == reqSendInvitation.Invitation.Key.SessionId);
-                            if (ses != null)
-                            {
-                                var isPriv = ses.FindProp(SessionParam.IsPrivate);
-                                if (isPriv != null && isPriv.Value != 0)
-                                    ses.AddParticipants(new List<uint>(), new List<uint> { pid });
-                                else
-                                    ses.AddParticipants(new List<uint> { pid }, new List<uint>());
-                                Log.WriteLine(1, $"Stand-in bot {pid} joined session {ses.Key.SessionId} " +
-                                                 $"({ses.NbParticipants()} participants)", LogSource.Session, Color.Orange);
-                            }
-                            NotificationManager.GameInviteAccepted(client, pid, reqSendInvitation.Invitation.Key.SessionId);
-                            // GameInviteAccepted alone left the roster empty, and the
-                            // log shows the client never asks the server who is in a
-                            // session - the roster is local state. Participation is the
-                            // one notification channel defined for a player joining that
-                            // this server has never sent, so fire it too.
-                            foreach (uint sub in Global.ParticipationSubtypes)
-                                NotificationManager.ParticipationChanged(
-                                    client, pid, reqSendInvitation.Invitation.Key.SessionId, sub);
-                        }
+                        // The stand-in-bot auto-join that used to live here is gone.
+                        // It faked a participant for an offline bot PID, from when bots
+                        // could not be real clients. They can now - one client per
+                        // Windows session was a semaphore check, not a hard limit - so
+                        // this only inflated the count: a two-player match reported
+                        // three participants, and the phantom was never in the match.
+                        // A real client accepts the invitation and joins through
+                        // case 17, which does it properly.
                     }
                     reply = new RMCPResponseEmpty();
                     RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);

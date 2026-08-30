@@ -41,6 +41,17 @@ import sys
 
 NAME = b'PrivateMinPlayers'
 PATCHED = NAME[:-1] + b'Z'
+
+# MinPlayers is the OTHER half of the problem. PrivateMinPlayers gates whether a
+# lobby may LAUNCH; MinPlayers is what a running match measures itself against,
+# and a match ends with "insufficient players" when it drops below it. Observed:
+# a two-player match ended the moment the second player died and left.
+#
+# The same string appears four times in the executable, so it is located by
+# position in the GameMode attribute table - the entry immediately after
+# PrivateMinPlayers - rather than by a plain search that could hit any of them.
+MIN_NAME = b'MinPlayers'
+MIN_PATCHED = MIN_NAME[:-1] + b'Z'
 DEFAULT_EXE = (r"C:\Program Files (x86)\Steam\steamapps\common"
                r"\Assassins Creed Brotherhood\ACBMP.exe")
 
@@ -59,6 +70,26 @@ def find_one(data, needle):
     return first
 
 
+def min_site(data):
+    """Offset of the GameMode table's MinPlayers, or None.
+
+    Anchored on PrivateMinPlayers rather than searched for directly: the string
+    occurs three times, one of them inside NeedsMinPlayersReady, and patching
+    the wrong one would do nothing while looking like it had worked.
+    """
+    anchor = data.find(NAME)
+    if anchor < 0:
+        anchor = data.find(PATCHED)
+    if anchor < 0:
+        return None
+    # Immediately after PrivateMinPlayers in the same table, within a few bytes.
+    for cand in (MIN_NAME + bytes([0]), MIN_PATCHED + bytes([0])):
+        off = data.find(cand, anchor + len(NAME), anchor + 64)
+        if off >= 0:
+            return off
+    return None
+
+
 def state(data):
     if find_one(data, NAME) is not None:
         return 'vanilla'
@@ -73,6 +104,10 @@ def main():
     ap.add_argument('--apply', action='store_true')
     ap.add_argument('--revert', action='store_true')
     ap.add_argument('--status', action='store_true')
+    ap.add_argument('--also-min-players', action='store_true',
+                    help='also neutralise MinPlayers, so a match does not end when '
+                         'the other player dies and leaves. UNVERIFIED: the default '
+                         'this falls back to has not been observed.')
     a = ap.parse_args()
 
     if not os.path.isfile(a.exe):
@@ -85,6 +120,10 @@ def main():
     print(f"  md5      {hashlib.md5(data).hexdigest()}")
     print(f"  state    {st}")
     print(f"  backup   {'present' if os.path.isfile(backup) else 'MISSING'}")
+    msite = min_site(data)
+    if msite is not None:
+        mstate = 'patched' if data[msite:msite + len(MIN_NAME)] == MIN_PATCHED else 'vanilla'
+        print(f"  MinPlayers at 0x{msite:X}: {mstate}")
 
     if a.status or not (a.apply or a.revert):
         if st == 'unknown':
@@ -102,11 +141,14 @@ def main():
             return 0
         off = find_one(data, PATCHED)
         data[off:off + len(PATCHED)] = NAME
+        if msite is not None and data[msite:msite + len(MIN_NAME)] == MIN_PATCHED:
+            data[msite:msite + len(MIN_NAME)] = MIN_NAME
+            print("  reverted MinPlayers too")
         open(a.exe, 'wb').write(data)
         print("  reverted: private lobbies use the shipped minimums again")
         return 0
 
-    if st == 'patched':
+    if st == 'patched' and not a.also_min_players:
         print("  already patched - nothing to do")
         return 0
     if st == 'unknown':
@@ -119,9 +161,18 @@ def main():
     off = find_one(data, NAME)
     if data[off + len(NAME)] != 0:
         raise SystemExit("  string is not NUL-terminated where expected - refusing")
-    data[off:off + len(NAME)] = PATCHED
+    if st == 'vanilla':
+        data[off:off + len(NAME)] = PATCHED
+        print(f"  patched at 0x{off:X}: {NAME.decode()} -> {PATCHED.decode()}")
+    if a.also_min_players:
+        if msite is None:
+            raise SystemExit("  MinPlayers not found next to PrivateMinPlayers - refusing")
+        if data[msite:msite + len(MIN_NAME)] == MIN_PATCHED:
+            print("  MinPlayers already patched")
+        else:
+            data[msite:msite + len(MIN_NAME)] = MIN_PATCHED
+            print(f"  patched at 0x{msite:X}: {MIN_NAME.decode()} -> {MIN_PATCHED.decode()}")
     open(a.exe, 'wb').write(data)
-    print(f"  patched at 0x{off:X}: {NAME.decode()} -> {PATCHED.decode()}")
     print("  private lobbies can now start with one player")
     return 0
 
