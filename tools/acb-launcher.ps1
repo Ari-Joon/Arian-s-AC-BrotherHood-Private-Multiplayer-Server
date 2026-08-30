@@ -63,6 +63,17 @@ param(
     # problem is unsolved.
     [int]$UserIndex = -1,
 
+    # Launch the separate bot executable instead of ACBMP.exe.
+    #
+    # Both clients otherwise share one config file - Saved Games\...    # ACBrotherhood.ini - which holds the INPUT BINDING and the graphics
+    # settings, so they fight over it and last writer wins. That is why the
+    # player's controller stops responding until it is re-selected in game,
+    # and why both characters answer the same gamepad.
+    #
+    # tools/bot-client.py builds ACBMP_bot.exe with that filename renamed, so
+    # the bot keeps its own settings and can be bound to its own controller.
+    [switch]$BotClient,
+
     # Print the command line that would be used, and launch nothing.
     [switch]$DryRun,
     [string]$GamePath,
@@ -397,14 +408,20 @@ if ($switches.Count) {
 } else {
     Write-Host "  no graphics switches - the game uses its own defaults" -ForegroundColor DarkGray
 }
+$exeName = if ($BotClient) { "ACBMP_bot.exe" } else { "ACBMP.exe" }
 if ($DryRun) {
     # Print the exact command line and stop. Useful while measuring which
     # switches affect pop-in, so a combination can be checked before a launch
     # rather than after one.
-    Write-Host "  would run: ACBMP.exe $($switches -join ' ') /onlineUser:*** /onlinePassword:***" -ForegroundColor Yellow
+    Write-Host "  would run: $exeName $($switches -join ' ') /onlineUser:*** /onlinePassword:***" -ForegroundColor Yellow
     exit 0
 }
-Start-Process -FilePath "$game\ACBMP.exe" -WorkingDirectory $game -ArgumentList $argv
+$exeName = if ($BotClient) { "ACBMP_bot.exe" } else { "ACBMP.exe" }
+if ($BotClient -and -not (Test-Path "$game\$exeName")) {
+    Write-Error "$exeName not found - build it with: python toolsot-client.py --build"
+    exit 1
+}
+Start-Process -FilePath "$game\$exeName" -WorkingDirectory $game -ArgumentList $argv
 
 # --- apply the window style --------------------------------------------------
 if ($Display -eq 'Fullscreen') { return }
