@@ -26,8 +26,15 @@ class Upscaler:
         opts = ort.SessionOptions()
         if threads:
             opts.intra_op_num_threads = threads
-        self.sess = ort.InferenceSession(model_path, opts,
-                                         providers=['CPUExecutionProvider'])
+        # Prefer a GPU provider when one is installed. onnxruntime-directml
+        # gives DmlExecutionProvider on any DX12 card - AMD, NVIDIA or Intel -
+        # and turns a multi-hour roster pass into minutes. Falls back to CPU
+        # silently, because a slow run is better than a failed one.
+        avail = ort.get_available_providers()
+        prefer = [p for p in ('DmlExecutionProvider', 'CUDAExecutionProvider') if p in avail]
+        providers = prefer + ['CPUExecutionProvider']
+        self.sess = ort.InferenceSession(model_path, opts, providers=providers)
+        self.provider = self.sess.get_providers()[0]
         self.iname = self.sess.get_inputs()[0].name
         self.tile = tile
         self.overlap = overlap

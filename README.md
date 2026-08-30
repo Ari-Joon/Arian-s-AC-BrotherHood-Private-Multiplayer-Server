@@ -532,6 +532,30 @@ time, and every change is reversible from a `.bak`.
 | **8x MSAA, 240 Hz, all quality maxima** | Confirmed from the game's own options screen | already at ceiling |
 | **Windowed / borderless** | The game has no such option; applied via Win32 after launch | done |
 
+### Switching between vanilla and upscaled
+
+There is no honest before/after without standing still and swapping. Comparing
+two screenshots taken at different moments compares camera positions — a
+"sharpness" number computed that way measures where you were standing, which is
+exactly how one comparison here briefly "proved" the upscale made things blurrier.
+
+```
+powershell -File tools\texture-toggle.ps1 -Capture Upscaled
+powershell -File tools\texture-toggle.ps1 -Capture Vanilla
+powershell -File tools\texture-toggle.ps1 -Mode Vanilla
+```
+
+Two complete sets of forges are kept side by side and switching copies one over
+the live files — **seconds**, not the hours a rebuild takes, at a cost of about
+3 GB. The launcher exposes the same thing as a **Texture set** dropdown, applied
+before launch. It cannot be an in-game button: the game reads its forges at
+startup.
+
+`-Capture Vanilla` refuses any forge whose `.bak` is not byte-for-byte the size
+Steam ships, because an intermediate backup is indistinguishable from a pristine
+one by name alone. If it skips some, verify the game files through Steam and
+re-capture.
+
 **Four of those controls have no in-game equivalent whatsoever** — full mip
 chains, atlas mipmaps, ambient occlusion and draw distance. They are what the
 launcher genuinely adds over the options menu.
@@ -570,8 +594,14 @@ python tools/texture-upscale/batch.py --dry-run
 python tools/texture-upscale/batch.py --prefix DataPC_skins_
 ```
 
-Needs `numpy`, `pillow` and `onnxruntime`. The ONNX weights are fetched
+Needs `numpy`, `pillow` and an onnxruntime. The ONNX weights are fetched
 separately and are not in this repo.
+
+**Install the GPU build.** `pip install onnxruntime-directml` uses any DX12 card
+— AMD, NVIDIA or Intel — and is **25x faster**: a 1024 texture takes 2.4 s
+against 60 s on the CPU, so the full 1,133-texture roster runs in about twenty
+minutes rather than four hours. Do not install both `onnxruntime` and
+`onnxruntime-directml`; they provide the same module and having both breaks it.
 
 ![Stock, Lanczos and Real-ESRGAN on the same patch](docs/images/upscaler-comparison.png)
 

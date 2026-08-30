@@ -59,6 +59,7 @@ $db       = Join-Path $server "database.sqlite"
 $launcher = Join-Path $PSScriptRoot "acb-launcher.ps1"
 $cfgPath  = Join-Path $PSScriptRoot "settings.json"
 $savedIni = Join-Path $env:USERPROFILE "Saved Games\Assassin's Creed Brotherhood\ACBrotherhood.ini"
+$game     = "C:\Program Files (x86)\Steam\steamapps\common\Assassins Creed Brotherhood"
 
 # --- palette -----------------------------------------------------------------
 $cBg       = [Drawing.Color]::FromArgb(22, 22, 26)
@@ -78,7 +79,7 @@ $fBtn   = New-Object Drawing.Font("Segoe UI Semibold", 12)
 
 # --- saved preferences -------------------------------------------------------
 $cfg = @{
-    Display = 'Borderless'; Resolution = ''; User = ''
+    Display = 'Borderless'; Resolution = ''; User = ''; TextureSet = 'leave as-is'
     Shadows = 'default'; PostFX = 'default'; MSAA = 'default'
     FullMips = 'default'; AtlasMips = 'default'; AmbientOcclusion = 'default'
     FarDist = 0
@@ -389,6 +390,26 @@ Add-Rule 30 838 410
 $cdBox = Add-Row "Ability cooldowns" "lower recharges faster" 902 @('default','0.75x','0.5x','0.25x','0.1x') $cfg.CooldownScale
 $duBox = Add-Row "Ability durations" "how long an ability lasts" 950 @('default','1.25x','1.5x','2x')       $cfg.DurationScale
 
+# --- textures -----------------------------------------------------------------
+# The game reads its forges at STARTUP, so this must happen before launch. An
+# in-game toggle would need the client's UI patched. Switching is a file copy
+# between two prepared sets, so it costs seconds rather than a rebuild's hours.
+Add-Rule 30 996 410
+[void](Add-Text "TEXTURES" 30 1012 $fHead $cAccent)
+[void](Add-Text "Swapped before launch. 'leave as-is' touches nothing." 32 1032 $fSmall $cMuted)
+$texBox = Add-Row "Texture set" "vanilla vs 2x AI upscale" 1060 @('leave as-is','Upscaled','Vanilla') $cfg.TextureSet
+$texNote = Add-Text "" 34 1104 $fSmall $cMuted
+
+# Say what is actually available rather than offering a switch that fails.
+$setsDir = Join-Path $game "multi\_texture_sets"
+$haveV = @(Get-ChildItem (Join-Path $setsDir 'Vanilla')  -Filter *.forge -ErrorAction SilentlyContinue).Count
+$haveU = @(Get-ChildItem (Join-Path $setsDir 'Upscaled') -Filter *.forge -ErrorAction SilentlyContinue).Count
+$texNote.Text = "sets ready - vanilla $haveV forges, upscaled $haveU forges"
+if ($haveV -eq 0 -or $haveU -eq 0) {
+    $texNote.Text += "   capture the missing set first"
+    $texNote.ForeColor = [Drawing.Color]::FromArgb(216, 168, 72)
+}
+
 $resetBtn = New-Object Windows.Forms.Button
 $resetBtn.Text = "Reset to defaults"
 $resetBtn.Location = New-Object Drawing.Point(268, 850)
@@ -474,6 +495,7 @@ $btn.Add_Click({
         AtlasMips        = $atlasBox.SelectedItem
         AmbientOcclusion = $aoBox.SelectedItem
         FarDist          = $far
+        TextureSet       = $texBox.SelectedItem
         CooldownScale    = $cdBox.SelectedItem
         DurationScale    = $duBox.SelectedItem
     } | ConvertTo-Json | Set-Content -Path $cfgPath -Encoding utf8
@@ -502,6 +524,18 @@ $btn.Add_Click({
         # Entries look like "1600 x 900" or "2560 x 1600  (native)".
         $m = [regex]::Match([string]$resBox.SelectedItem, '(\d+)\s*x\s*(\d+)')
         if ($m.Success) { $a += @('-Width', $m.Groups[1].Value, '-Height', $m.Groups[2].Value) }
+    }
+
+    # Swap BEFORE launching. The game reads forges at startup, so doing this
+    # afterwards would silently apply to the next run instead of this one.
+    $want = [string]$texBox.SelectedItem
+    if ($want -and $want -ne 'leave as-is') {
+        $t = Join-Path $PSScriptRoot "texture-toggle.ps1"
+        if (Test-Path $t) {
+            $btn.Text = "SWITCHING TEXTURES..."
+            $btn.Refresh()
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $t -Mode $want | Out-Null
+        }
     }
 
     Start-Process powershell -ArgumentList $a -WindowStyle Hidden
