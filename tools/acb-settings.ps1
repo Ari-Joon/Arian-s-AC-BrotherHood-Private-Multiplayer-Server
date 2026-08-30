@@ -450,18 +450,45 @@ Add-Rule 30 838 410
 [void](Add-Text "MATCH RULES" 30 854 $fHead $cAccent)
 [void](Add-Text "Applied by the host. Everyone who joins plays by these." 32 874 $fSmall $cMuted)
 
-$cdBox = Add-Row "Ability cooldowns" "lower recharges faster" 902 @('default','0.75x','0.5x','0.25x','0.1x') $cfg.CooldownScale
-$duBox = Add-Row "Ability durations" "how long an ability lasts" 950 @('default','1.25x','1.5x','2x')       $cfg.DurationScale
+# A whole page for abilities: every one the game has, with its own parameters.
+# Host only - it edits the settings file the SERVER hands out, so it would do
+# nothing on a joining player's machine.
+$skillsBtn = New-Object Windows.Forms.Button
+$skillsBtn.Text = "Customise abilities..."
+$skillsBtn.Location = New-Object Drawing.Point(34, 898)
+$skillsBtn.Size = New-Object Drawing.Size(200, 32)
+$skillsBtn.Font = $fBody
+$skillsBtn.FlatStyle = 'Flat'
+$skillsBtn.BackColor = $cPanel
+$skillsBtn.ForeColor = $cText
+$skillsBtn.FlatAppearance.BorderColor = [Drawing.Color]::FromArgb(74, 74, 86)
+$skillsBtn.Cursor = 'Hand'
+$form.Controls.Add($skillsBtn)
+[void](Add-Text "22 abilities, every parameter, and unlock-everything" 34 934 $fSmall $cMuted)
+$skillsBtn.Add_Click({
+    $ed = Join-Path $PSScriptRoot "skills-editor.ps1"
+    if (Test-Path $ed) {
+        Start-Process powershell -ArgumentList @('-STA','-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$ed`"")
+    }
+})
+if (-not $isHost) {
+    $skillsBtn.Enabled = $false
+    $skillsBtn.Text = "Abilities - host only"
+    $skillsBtn.ForeColor = $cMuted
+}
+
+$cdBox = Add-Row "Ability cooldowns" "lower recharges faster" 962 @('default','0.75x','0.5x','0.25x','0.1x') $cfg.CooldownScale
+$duBox = Add-Row "Ability durations" "how long an ability lasts" 1010 @('default','1.25x','1.5x','2x')      $cfg.DurationScale
 
 # --- textures -----------------------------------------------------------------
 # The game reads its forges at STARTUP, so this must happen before launch. An
 # in-game toggle would need the client's UI patched. Switching is a file copy
 # between two prepared sets, so it costs seconds rather than a rebuild's hours.
-Add-Rule 30 996 410
-[void](Add-Text "TEXTURES" 30 1012 $fHead $cAccent)
-[void](Add-Text "Swapped before launch. 'leave as-is' touches nothing." 32 1032 $fSmall $cMuted)
-$texBox = Add-Row "Texture set" "vanilla vs 2x AI upscale" 1060 @('leave as-is','Upscaled','Vanilla') $cfg.TextureSet
-$texNote = Add-Text "" 34 1104 $fSmall $cMuted
+Add-Rule 30 1056 410
+[void](Add-Text "TEXTURES" 30 1072 $fHead $cAccent)
+[void](Add-Text "Swapped before launch. 'leave as-is' touches nothing." 32 1092 $fSmall $cMuted)
+$texBox = Add-Row "Texture set" "vanilla vs 2x AI upscale" 1120 @('leave as-is','Upscaled','Vanilla') $cfg.TextureSet
+$texNote = Add-Text "" 34 1164 $fSmall $cMuted
 
 # Say what is actually available rather than offering a switch that fails.
 $setsDir = Join-Path $game "multi\_texture_sets"

@@ -42,6 +42,51 @@ TUNABLE = ["CooldownDuration", "Duration", "Radius", "SpeedFactor",
 
 ABILITY_RE = re.compile(rb'<(Ability\w+) memberName')
 
+# Every ability carries an UnlockConditionLevel saying which player level opens
+# it. Dropping them all to 1 makes the whole roster available to every account
+# immediately, which is the point on a private server where nobody wants to
+# grind fifty levels to try Morph.
+UNLOCK_RE = re.compile(rb'(<UnlockConditionLevel memberName="UnlockConditionRef">\s*<Level value=")(\d+)(")')
+
+
+def unlock_all(data, level=1):
+    """Set every unlock level to `level`. Returns (data, how_many_changed)."""
+    changed = [0]
+
+    def repl(m):
+        if m.group(2) == str(level).encode():
+            return m.group(0)
+        changed[0] += 1
+        return m.group(1) + str(level).encode() + m.group(3)
+
+    return UNLOCK_RE.sub(repl, data), changed[0]
+
+
+def dump_json(data):
+    """Describe every ability and its tunables, for the launcher's Skills page.
+
+    Emitted from the same parse the edits use, so the UI can never show a
+    parameter the editor cannot then write.
+    """
+    import json
+    out = []
+    for name, s, e in blocks(data):
+        if name in ("AbilityManagerMulti", "AbilityUnlockCondition"):
+            continue
+        body = data[s:e]
+        params = {}
+        for m in re.finditer(rb'<(\w+) value="([\d.\-]+)"/>', body):
+            tag = m.group(1).decode()
+            if tag in ("Icon", "Index", "OasisLineID"):
+                continue
+            params.setdefault(tag, m.group(2).decode())
+        idx = re.search(rb'<Index value="(\d+)"/>', body)
+        if params:
+            out.append({"ability": name,
+                        "tier": int(idx.group(1)) if idx else 0,
+                        "params": params})
+    print(json.dumps(out, indent=1))
+
 
 def blocks(data):
     """Yield (class_name, start, end) for each ability block.
@@ -127,12 +172,20 @@ def main():
     ap.add_argument("--set", action="append", default=[], metavar="CLASS:PARAM=VALUE",
                     help="e.g. AbilitySmokeBomb:Radius=8.0 (repeatable)")
     ap.add_argument("--show", action="store_true", help="list tunables and exit")
+    ap.add_argument("--dump-json", action="store_true",
+                    help="describe abilities and tunables as JSON, then exit")
+    ap.add_argument("--unlock-all", nargs="?", const=1, type=int, metavar="LEVEL",
+                    help="set every ability's unlock level to LEVEL (default 1)")
     a = ap.parse_args()
 
     data = open(a.xml, "rb").read()
 
     if a.show:
         show(data)
+        return
+
+    if a.dump_json:
+        dump_json(data)
         return
 
     scale = {}
@@ -151,10 +204,14 @@ def main():
             sys.exit("%s is not tunable; try one of: %s" % (param, ", ".join(TUNABLE)))
         sets[(cls, param)] = value
 
-    if not scale and not sets:
-        sys.exit("nothing to do - pass --scale-cooldowns, --set, or --show")
+    if not scale and not sets and a.unlock_all is None:
+        sys.exit("nothing to do - pass --scale-cooldowns, --set, --unlock-all, or --show")
 
-    out, changed = apply_rules(data, scale, sets)
+    out, changed = apply_rules(data, scale, sets) if (scale or sets) else (data, 0)
+
+    unlocked = 0
+    if a.unlock_all is not None:
+        out, unlocked = unlock_all(out, a.unlock_all)
 
     # A rule that matched nothing is a typo, not a no-op. Say so rather than
     # writing an unchanged file and reporting success.
@@ -162,6 +219,8 @@ def main():
         sys.exit("no rule matched anything - check the ability class names with --show")
 
     open(a.out or a.xml, "wb").write(out)
+    if unlocked:
+        print("  %d unlock level(s) set to %d" % (unlocked, a.unlock_all))
     print("  %d ability block(s) changed" % changed)
     print("  %d bytes in, %d bytes out" % (len(data), len(out)))
     print("  wrote %s" % (a.out or a.xml))
