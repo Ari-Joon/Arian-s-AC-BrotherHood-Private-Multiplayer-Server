@@ -34,6 +34,28 @@ namespace QuazalWV
         public static uint MinReportedSlots { get; set; } =
             uint.TryParse(ConfigurationManager.AppSettings["MinReportedSlots"], out var v) ? v : 0;
 
+        /// <summary>
+        /// Fabricate this many party members when a session is created, by
+        /// sending the host GameSession/InviteAccepted notifications carrying
+        /// bot PIDs.
+        ///
+        /// WHY THIS AND NOT SLOT PADDING. A private lobby refuses to launch
+        /// below a minimum, and the client says why: "not enough members in
+        /// your GROUP". Padding CurrentPrivateSlots was tried and provably did
+        /// nothing - the gate reads the party roster, not the session slots.
+        /// The roster is populated by notifications: an invite-accepted
+        /// notification once made the host's lobby list a player the server did
+        /// not actually have, because the lobby acts on the message. This sends
+        /// that message deliberately.
+        ///
+        /// The PIDs used are real Bot accounts from the database, so the client
+        /// can resolve names for them rather than showing blanks.
+        ///
+        /// 0 disables it. Set in App.config.
+        /// </summary>
+        public static uint FakePartyMembers { get; set; } =
+            uint.TryParse(ConfigurationManager.AppSettings["FakePartyMembers"], out var fp) ? fp : 0;
+
         public static uint IdCounter { get; set; } = 0x12345678;
         public static uint PidCounter { get; set; } = 0x1234;
         public static uint GathIdCounter { get; set; } = 0x34;

@@ -84,3 +84,6 @@ tools/graphics-pending.json
 
 # Real-ESRGAN ONNX weights - 33 MB, fetched separately, not ours to redistribute
 tools/texture-upscale/*.onnx
+
+# Built client packs
+dist/

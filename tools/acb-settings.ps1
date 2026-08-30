@@ -91,8 +91,22 @@ if (Test-Path $cfgPath) {
     } catch { }
 }
 
-$accounts = @(sqlite3 "$db" "SELECT name FROM users WHERE name <> 'Tracking' ORDER BY pid;")
-if (-not $accounts) { $accounts = @('Player') }
+# HOST or CLIENT? The account list lives in the server's database, which only
+# the host has. On a joining player's machine there is no database and probably
+# no sqlite3 either, and with ErrorActionPreference=Stop that threw before the
+# window ever appeared - the launcher simply did not start for anyone but the
+# host. Detect it and fall back to the account they were given.
+$isHost = (Test-Path $db) -and [bool](Get-Command sqlite3 -ErrorAction SilentlyContinue)
+$accounts = @()
+if ($isHost) {
+    try { $accounts = @(sqlite3 "$db" "SELECT name FROM users WHERE name <> 'Tracking' ORDER BY pid;") } catch { }
+}
+if (-not $accounts) {
+    # Client: offer whatever was saved by client-setup.ps1, and let them type.
+    $accounts = @()
+    if ($cfg.User) { $accounts += $cfg.User }
+    if (-not $accounts) { $accounts = @('Player') }
+}
 
 # --- real screen size, without making this process DPI-aware ------------------
 # Screen.PrimaryScreen.Bounds would return DPI-scaled values here (e.g. 1707x1067
@@ -350,6 +364,14 @@ $renameBtn.FlatAppearance.BorderColor = [Drawing.Color]::FromArgb(74, 74, 86)
 $renameBtn.FlatAppearance.BorderSize = 1
 $renameBtn.Cursor = 'Hand'
 $form.Controls.Add($renameBtn)
+
+# Renaming edits the server's database, so it is meaningless on a client.
+if (-not $isHost) {
+    $renameBtn.Enabled = $false
+    $renameBtn.Text = "host only"
+    $renameBtn.ForeColor = $cMuted
+    $uBox.DropDownStyle = 'DropDown'      # let a joining player type their name
+}
 
 $renameBtn.Add_Click({
     $old = [string]$uBox.SelectedItem

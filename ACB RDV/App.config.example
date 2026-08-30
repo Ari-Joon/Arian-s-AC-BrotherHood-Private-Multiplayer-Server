@@ -19,5 +19,9 @@
              client's own party roster ("not enough members in your group"), not
              the session slot count. Kept as the evidence for that negative. -->
         <add key="MinReportedSlots" value="0" />
+        <!-- Fabricate this many party members on session creation, to test
+             whether the private-lobby launch gate can be satisfied without
+             real players. 0 = off. Uses Bot PIDs from the database. -->
+        <add key="FakePartyMembers" value="0" />
     </appSettings>
 </configuration>

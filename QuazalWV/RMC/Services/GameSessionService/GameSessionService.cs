@@ -100,6 +100,23 @@ namespace QuazalWV
                     Global.Sessions.Add(newSes);
                     reply = new RMCPacketResponseGameSessionService_CreateSession(reqCreateSes.Session.TypeId, sesId);
                     RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);
+
+                    // EXPERIMENT: fabricate party members so a solo lobby can
+                    // reach the minimum a private match demands. The gate reads
+                    // the party roster - padding session slots was tried and
+                    // did nothing - and the roster is built from notifications.
+                    // Bot PIDs start at 1003 in the seeded database.
+                    if (Global.FakePartyMembers > 0)
+                    {
+                        for (uint i = 0; i < Global.FakePartyMembers; i++)
+                        {
+                            uint fakePid = 1003 + i;
+                            if (fakePid == client.PID) continue;
+                            NotificationManager.GameInviteAccepted(client, fakePid, sesId);
+                            Log.WriteLine(1, $"Fabricated party member: told {client.PID} that PID {fakePid} " +
+                                             $"accepted into session {sesId}", LogSource.Session, Color.Orange);
+                        }
+                    }
                     break;
                 case 2:
                     var reqUpdateSes = (RMCPacketRequestGameSessionService_UpdateSession)rmc.request;
