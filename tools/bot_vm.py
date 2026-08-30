@@ -87,23 +87,53 @@ class Tier:
         return "<Tier %s>" % self.name
 
 
+# Brotherhood scores a kill by how well it was hidden. Worst to best:
+#
+#     Poor  <  Discreet  <  Silent  <  Incognito
+#
+# A Poor Kill is one made sprinting in the open; Incognito means never breaking
+# blend at all. One behaviour profile per kill type, each PLAYING FOR that kill
+# and accepting its cost: the patient ones score high and kill rarely, the
+# impatient one kills often and scores badly.
+#
+# NOTE ON THE WORD "PERSONA". In this file a persona is the visual skin a bot
+# wears (Harlequin, Doctor...), which is what the doubles mechanic hides it
+# among. These behaviour profiles are TIERS. Two different things.
 TIERS = {
+    # Never breaks blend. Waits for near-certainty, approaches only in crowd,
+    # and abandons a target rather than be seen moving oddly. Kills least often
+    # of any tier and scores highest when it does.
+    "incognito": Tier(
+        "incognito",
+        kill_goal="Incognito",
+        commit_confidence=0.90,   # how sure before it acts
+        observe_ticks=10,         # how long it studies a contact
+        sprint_bias=0.00,         # never runs - running is what loses Incognito
+        blend_bias=0.85,          # strong preference for hiding and resetting
+        tell_rate=0.03,           # visible human error per tick
+        lose_interest=34,
+        approach_range=0.62,      # closes to here before committing
+        kill_range=0.92),
+
     # Wants the silent kill. Waits for near-certainty, closes on foot, uses
     # blend, and will abandon a target rather than break cover by sprinting.
-    "assassin": Tier(
-        "assassin",
-        commit_confidence=0.82,   # how sure before it acts
-        observe_ticks=7,          # how long it studies a contact
-        sprint_bias=0.08,         # willingness to run, which blows stealth
-        blend_bias=0.65,          # willingness to hide and reset
-        tell_rate=0.06,           # visible human error per tick
+    "silent": Tier(
+        "silent",
+        kill_goal="Silent",
+        commit_confidence=0.82,
+        observe_ticks=7,
+        sprint_bias=0.08,
+        blend_bias=0.65,
+        tell_rate=0.06,
         lose_interest=26,
-        approach_range=0.55,      # closes to here before committing
+        approach_range=0.55,
         kill_range=0.88),
 
-    # Balanced. Commits on decent evidence, will chase if the target bolts.
-    "hunter": Tier(
-        "hunter",
+    # Balanced. Commits on decent evidence, will chase if the target bolts, and
+    # settles for a Discreet kill rather than lose the contact.
+    "discreet": Tier(
+        "discreet",
+        kill_goal="Discreet",
         commit_confidence=0.62,
         observe_ticks=4,
         sprint_bias=0.34,
@@ -113,10 +143,12 @@ TIERS = {
         approach_range=0.45,
         kill_range=0.85),
 
-    # Impatient. Runs at weak evidence, chases anything that moves, and is
-    # wrong often. This is the tier that creates most of the visible chasing.
+    # Impatient. Runs at weak evidence, chases anything that moves, and is wrong
+    # often. Takes the Poor Kill happily. This tier creates most of the visible
+    # chasing, which is what makes a match feel populated.
     "brute": Tier(
         "brute",
+        kill_goal="Poor",
         commit_confidence=0.38,
         observe_ticks=1,
         sprint_bias=0.78,
@@ -126,6 +158,12 @@ TIERS = {
         approach_range=0.30,
         kill_range=0.80),
 }
+
+# The two original names, kept working. The measured accuracy table in the
+# README was produced under them, and silently repointing those names at
+# different numbers would invalidate it.
+TIERS["assassin"] = TIERS["silent"]
+TIERS["hunter"] = TIERS["discreet"]
 
 
 # ------------------------------------------------------------ perception ---
@@ -517,8 +555,11 @@ def main():
     ap.add_argument("--ticks", type=int, default=40)
     ap.add_argument("--bots", type=int, default=3)
     ap.add_argument("--seed", type=int, default=None)
-    ap.add_argument("--tiers", default="assassin,hunter,brute",
-                    help="one tier per bot, in order")
+    ap.add_argument("--tiers", default="incognito,silent,discreet,brute",
+                    help="one tier per bot, in order (cycled if fewer than --bots)")
+    ap.add_argument("--random-tiers", action="store_true",
+                    help="assign tiers at random instead of in order; distinct "
+                         "while there are enough to go round")
     ap.add_argument("--quiet", action="store_true", help="summary only")
     a = ap.parse_args()
 
@@ -528,13 +569,26 @@ def main():
         if t not in TIERS:
             sys.exit("unknown tier %r (have: %s)" % (t, ", ".join(TIERS)))
 
+    # Random tiers are sampled WITHOUT replacement first, so a four-bot match
+    # gets one of each kill type rather than, on average, two brutes. Only once
+    # the four are used up does it start repeating.
+    if a.random_tiers:
+        bag = rng.sample(tiers, len(tiers))
+        def tier_for(i):
+            if i and i % len(bag) == 0:
+                bag[:] = rng.sample(tiers, len(tiers))
+            return bag[i % len(bag)]
+    else:
+        def tier_for(i):
+            return tiers[i % len(tiers)]
+
     # Three distinct personas, never the same one twice.
     chosen = rng.sample(PERSONAS, min(a.bots, len(PERSONAS)))
     bots = []
     for i in range(a.bots):
         persona = chosen[i % len(chosen)]
         target = rng.choice([p for p in PERSONAS if p != persona])
-        tier = TIERS[tiers[i % len(tiers)]]
+        tier = TIERS[tier_for(i)]
         eyes = (SimPerception(rng, target) if a.simulate else ScreenPerception())
         bots.append(Bot("bot%d" % (i + 1), persona, target, tier, eyes,
                         TraceActuator(), default_waypoints(rng), rng))

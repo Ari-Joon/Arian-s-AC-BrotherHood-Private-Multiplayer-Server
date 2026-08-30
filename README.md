@@ -748,14 +748,39 @@ to a location — `GOTO`, `WANDER`, `LOOK`, `OBSERVE`, `STALK`, `PURSUE`, `KILL`
 only bearing, apparent distance, facing and appearance match. Confidence builds
 by watching, and each tier needs a different amount before committing:
 
-| Tier | Commits at | Patience | Sprints | Tells | Accuracy |
+| Tier | Kill it plays for | Commits at | Patience | Sprints | Blown cover |
 |---|---|---|---|---|---|
-| `assassin` | 0.82 confidence | 7 ticks observing | 0% | 6% | **52%** |
-| `hunter` | 0.62 | 4 ticks | 2% | 14% | 46% |
-| `brute` | 0.38 | 1 tick | 6% | 27% | 39% |
+| `incognito` | Incognito | 0.90 | 10 ticks | 0% | **0** |
+| `silent` | Silent | 0.82 | 7 ticks | 8% | 5 |
+| `discreet` | Discreet | 0.62 | 4 ticks | 34% | 53 |
+| `brute` | Poor | 0.38 | 1 tick | 78% | 217 |
 
-Accuracy is over 60 runs of 120 ticks, scored against **ground truth** the bot
-cannot see. A random guess scores 33%.
+One profile per kill type, worst to best: **Poor < Discreet < Silent < Incognito**.
+`assassin` and `hunter` still work as aliases for `silent` and `discreet`.
+
+Measured over 60 runs of 120 ticks each, scored against **ground truth** the bot
+cannot see:
+
+| Tier | Kills | Mistakes | Accuracy |
+|---|---|---|---|
+| `incognito` | 9 | 21 | 30% |
+| `silent` | 68 | 82 | 45% |
+| `discreet` | 253 | 249 | 50% |
+| `brute` | 596 | 1083 | 35% |
+
+A random guess scores 33%.
+
+**Read these honestly.** Two axes behave exactly as designed and are monotonic:
+blown cover (0 / 5 / 53 / 217) and kill volume (9 / 68 / 253 / 596). Patience
+buys stealth and costs opportunities, precisely as intended.
+
+**Accuracy is not ordered, and the claim that patience buys accuracy does not
+survive this measurement.** `discreet` (50%) beats `silent` (45%), and
+`incognito` sits at 30% — below the random baseline — on only 9 kills across 60
+runs, which is noise, not skill. A tier that commits that rarely cannot be
+measured this way at all. Either its threshold needs lowering or the metric
+needs far more runs; both are open. An earlier version of this table claimed a
+clean ordering on a smaller sample, and that ordering did not hold up.
 
 That baseline exists because the simulated crowd contains **doubles** —
 civilians wearing the target's own persona, visually identical to it. That is
