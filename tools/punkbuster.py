@@ -41,16 +41,25 @@ GAME = (r"C:\Program Files (x86)\Steam\steamapps\common"
 SUFFIX = ".disabled"
 
 
-def modules(pb):
-    """Client-side PunkBuster modules, enabled or disabled.
+# WHICH MODULE ACTUALLY KICKS. Only the SERVER module carries the strings
+# "kicked player" and "RESTRICTION" - the client module carries neither:
+#
+#   ws001802.dll  {'kicked player': 1, 'RESTRICTION': 5}   <- the ejector
+#   wc002261.dll  none
+#
+# That matches the peer-to-peer message name O2O_SendPunkBusterKick: the HOST
+# runs the PunkBuster server module, judges its peer and kicks it. Disabling
+# the client module on the bot cannot prevent a decision the host makes, and
+# very likely caused the "initialization failed" text in the first place.
+PATTERNS = {"server": "ws*.dll", "client": "wc*.dll", "ag": "wa*.dll"}
 
-    wc* is the client module - the one that talks to PnkBstrB and ejects. ws*
-    is the SERVER module and wa* the ag module; neither is left disabled here,
-    because only the client half does the kicking.
-    """
+
+def modules(pb, kinds=("server",)):
     out = []
-    for pat in ("wc*.dll", "wc*.dll" + SUFFIX):
-        out += glob.glob(os.path.join(pb, "dll", pat))
+    for kind in kinds:
+        pat = PATTERNS[kind]
+        for p in (pat, pat + SUFFIX):
+            out += glob.glob(os.path.join(pb, "dll", p))
     return sorted(set(out))
 
 
@@ -60,16 +69,20 @@ def main():
     ap.add_argument('--status', action='store_true')
     ap.add_argument('--disable', action='store_true')
     ap.add_argument('--enable', action='store_true')
+    ap.add_argument('--kinds', default='server',
+                    help="comma-separated: server, client, ag. Default 'server' - "
+                         "the only module that does the kicking.")
     a = ap.parse_args()
 
     pb = os.path.join(a.game, "pb")
     if not os.path.isdir(pb):
         raise SystemExit(f"  no pb folder at {pb}")
 
-    mods = modules(pb)
+    kinds = tuple(k.strip() for k in a.kinds.split(',') if k.strip() in PATTERNS)
+    mods = modules(pb, kinds or ('server',))
     if not mods:
-        raise SystemExit("  no wc*.dll client module found in pb/dll - "
-                         "refusing to guess which file to touch")
+        raise SystemExit(f"  no {kinds} module found in pb/dll - "
+                         f"refusing to guess which file to touch")
 
     if a.status or not (a.disable or a.enable):
         for m in mods:
@@ -90,7 +103,7 @@ def main():
     if not changed:
         print("  already in that state")
     elif a.disable:
-        print("  PunkBuster client disabled - a second client should stop being ejected")
+        print("  disabled - the host should stop ejecting its peer")
     return 0
 
 
