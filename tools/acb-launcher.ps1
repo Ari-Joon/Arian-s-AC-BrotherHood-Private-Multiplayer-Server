@@ -28,7 +28,31 @@ param(
     [ValidateSet('default','on','off')] [string]$FullMips  = 'default',
     [ValidateSet('default','on','off')] [string]$AtlasMips = 'default',
     [ValidateSet('default','on','off')] [string]$AmbientOcclusion = 'default',
+    # --- pop-in ---------------------------------------------------------
+    # These are real switches: they sit in the same NUL-separated table in
+    # ACBMP.exe as /onlineUser, /msaa, /shadows and /skipmips, which are all
+    # known to work. What they DO is inferred from their names and is NOT
+    # verified - fardist's units are unknown, and whether the booleans take
+    # on/off like the others is an assumption from the neighbouring switches.
+    # Treat them as candidates to measure, not settings that are known good.
+    #
+    #   fardist         far draw distance - geometry appearing late
+    #   novramstreaming disable VRAM texture streaming - blurry-then-sharp
+    #   loadondemand    stream on demand vs preload
+    #   preloadshaders  first-encounter shader stutter
     [int]$FarDist = 0,
+
+    [ValidateSet('default','on','off')] [string]$VramStreaming  = 'default',
+    [ValidateSet('default','on','off')] [string]$LoadOnDemand   = 'default',
+    [ValidateSet('default','on','off')] [string]$PreloadShaders = 'default',
+
+    # Raw passthrough so a switch can be tried without editing this file:
+    #   -Switch loadondemand:off -Switch fardist:2000
+    # Named without the leading slash. Anything here is appended last.
+    [string[]]$Switch,
+
+    # Print the command line that would be used, and launch nothing.
+    [switch]$DryRun,
     [string]$GamePath,
 
     # --- match rules ---------------------------------------------------------
@@ -318,6 +342,16 @@ if ($AmbientOcclusion -ne 'default') {
                "/skipao:$(if ($AmbientOcclusion -eq 'on') { 'off' } else { 'on' })")
 }
 if ($FarDist -gt 0) { $argv += "/fardist:$FarDist" }
+# novramstreaming is named for the negative, so the flag inverts - same trap as
+# skipmips above, where asking for full mips means asking to skip none.
+if ($VramStreaming -ne 'default') {
+    $argv += "/novramstreaming:" + $(if ($VramStreaming -eq 'on') { 'off' } else { 'on' })
+}
+if ($LoadOnDemand   -ne 'default') { $argv += "/loadondemand:$LoadOnDemand" }
+if ($PreloadShaders -ne 'default') { $argv += "/preloadshaders:$PreloadShaders" }
+foreach ($sw in $Switch) {
+    if ($sw) { $argv += "/" + $sw.TrimStart('/') }
+}
 
 # NOTES ON THE SWITCHES, so nobody re-derives them.
 #
@@ -349,6 +383,13 @@ if ($switches.Count) {
     Write-Host "  switches: $($switches -join ' ')" -ForegroundColor DarkGray
 } else {
     Write-Host "  no graphics switches - the game uses its own defaults" -ForegroundColor DarkGray
+}
+if ($DryRun) {
+    # Print the exact command line and stop. Useful while measuring which
+    # switches affect pop-in, so a combination can be checked before a launch
+    # rather than after one.
+    Write-Host "  would run: ACBMP.exe $($switches -join ' ') /onlineUser:*** /onlinePassword:***" -ForegroundColor Yellow
+    exit 0
 }
 Start-Process -FilePath "$game\ACBMP.exe" -WorkingDirectory $game -ArgumentList $argv
 
