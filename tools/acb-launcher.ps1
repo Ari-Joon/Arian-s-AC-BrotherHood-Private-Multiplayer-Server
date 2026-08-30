@@ -51,20 +51,16 @@ param(
     # Named without the leading slash. Anything here is appended last.
     [string[]]$Switch,
 
-    # Which XInput pad this instance reads. /userindex:%u is a real switch -
-    # the string sits in ACBMP.exe next to /username:%s /password:%s.
+    # /userindex:%u is a real switch, but it is NOT a controller selector.
+    # That was inferred from the name to explain two clients sharing input, and
+    # it is wrong: the format string sits beside /username:%s /password:%s, so it
+    # indexes a local USER PROFILE. Measured - /userindex:1 makes the client exit
+    # immediately with nothing in the server log, while the identical launch
+    # without it logs in normally. Profile 1 does not exist.
     #
-    # THIS MATTERS FOR BOTS. XInput is global, so two clients on one machine
-    # both poll pad 0 by default and the second character MIRRORS the first:
-    # move your controller and the bot climbs and runs with you. It looks
-    # convincingly like the bot is reacting to you. It is not - nothing is
-    # driving it.
-    #
-    # Give each instance its own index and they stop sharing input. A bot on an
-    # index with no pad attached simply receives nothing, which is what is
-    # wanted until something is actually driving it.
-    #
-    # -1 leaves the switch off entirely (the game's default).
+    # Left exposed because it is a genuine switch, but -1 (off) is the only value
+    # known to be safe. It does NOT stop two clients sharing a gamepad; that
+    # problem is unsolved.
     [int]$UserIndex = -1,
 
     # Print the command line that would be used, and launch nothing.
