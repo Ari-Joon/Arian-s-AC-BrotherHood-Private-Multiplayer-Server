@@ -42,14 +42,22 @@ namespace QuazalWV
             return m.ToArray();
         }
 
-        public void RegisterUrls(ClientInfo client, Session ses)
+        /// <summary>
+        /// Record the caller's URLs. Only a HOST replaces the session's host
+        /// URLs - those are the address every other client is told to connect
+        /// to, so letting any participant overwrite them points the whole
+        /// session at the wrong machine.
+        /// </summary>
+        public void RegisterUrls(ClientInfo client, Session ses, bool asHost = true)
         {
             client.RegisteredUrls.Clear();
-            ses.HostUrls.Clear();
+            if (asHost)
+                ses.HostUrls.Clear();
             foreach (StationUrl url in Urls)
             {
                 client.RegisteredUrls.Add(url);
-                ses.HostUrls.Add(url);
+                if (asHost)
+                    ses.HostUrls.Add(url);
             }
         }
     }

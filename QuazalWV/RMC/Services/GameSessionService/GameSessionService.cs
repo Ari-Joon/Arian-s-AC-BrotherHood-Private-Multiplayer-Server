@@ -419,13 +419,35 @@ namespace QuazalWV
                         else
                         {
                             var newHostPid = reqRegUrls.Urls.First().PID;
-                            ses.HostPid = newHostPid;
-                            reqRegUrls.RegisterUrls(client, ses);
-                            if (ses.Migrating)
+                            // HostPid used to be assigned on EVERY RegisterURLs, and
+                            // Migrating only decided whether to LOG a migration. So any
+                            // participant re-registering its URLs took over the session:
+                            // a client ejected by PunkBuster re-registered, became host of
+                            // the match the other player was still in, and the session then
+                            // advertised the wrong address - every rejoin reported the host
+                            // unreachable.
+                            //
+                            // A caller becomes host only on a real migration, when the
+                            // session has no host, when it already IS the host, or when the
+                            // host has gone away.
+                            bool hostConnected = Global.Clients.Exists(
+                                c => c.User != null && c.User.Pid == ses.HostPid);
+                            bool asHost = ses.Migrating || ses.HostPid == 0
+                                          || ses.HostPid == newHostPid || !hostConnected;
+                            if (asHost)
                             {
-                                Log.WriteRmcLine(1, $"RegisterURLs: Host migration for session {ses.Key.SessionId}, new host {newHostPid}", protocol, LogSource.RMC, Color.Blue, client);
-                                ses.Migrating = false;
+                                ses.HostPid = newHostPid;
+                                if (ses.Migrating)
+                                {
+                                    Log.WriteRmcLine(1, $"RegisterURLs: Host migration for session {ses.Key.SessionId}, new host {newHostPid}", protocol, LogSource.RMC, Color.Blue, client);
+                                    ses.Migrating = false;
+                                }
                             }
+                            else
+                            {
+                                Log.WriteRmcLine(1, $"RegisterURLs from non-host {newHostPid}; session {ses.Key.SessionId} keeps host {ses.HostPid}", protocol, LogSource.RMC, Color.Orange, client);
+                            }
+                            reqRegUrls.RegisterUrls(client, ses, asHost);
                             RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);
                         }
                     }
