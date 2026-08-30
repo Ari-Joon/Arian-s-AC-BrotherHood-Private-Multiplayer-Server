@@ -515,6 +515,36 @@ the two bugs worth not repeating.
 
 ---
 
+## What changed graphically
+
+Everything below is offline work on your own installation. Nothing costs frame
+time, and every change is reversible from a `.bak`.
+
+| change | what it does | state |
+|---|---|---|
+| **1,133 textures at 2x** | Every diffuse texture in the multiplayer game through Real-ESRGAN — 69 characters, 770 environment across twelve maps, 294 DLC skins | done, verified in game |
+| **16x anisotropic filtering** | The game does no AF at all — zero `Anisotropic` keys in either binary. Ground and walls at a shallow angle went from smeared to legible | done, driver-side |
+| **Full mip chains** | `/skipmips:off` and friends. +108.6 MB resident | in the launcher |
+| **Atlas mipmaps** | `/generateatlasmipmaps:on`. +111.5 MB, possibly the same effect | in the launcher |
+| **Ambient occlusion** | `/computeao:on /skipao:off` — contact shadowing, no in-game equivalent | in the launcher |
+| **Draw distance** | `/fardist:` — no in-game equivalent | in the launcher |
+| **Shadows / post-processing** | `/shadows:full /postfx:full`. Luminance std 106 against 63 with them off | measured, camera-confounded |
+| **8x MSAA, 240 Hz, all quality maxima** | Confirmed from the game's own options screen | already at ceiling |
+| **Windowed / borderless** | The game has no such option; applied via Win32 after launch | done |
+
+**Four of those controls have no in-game equivalent whatsoever** — full mip
+chains, atlas mipmaps, ambient occlusion and draw distance. They are what the
+launcher genuinely adds over the options menu.
+
+**What did NOT change, deliberately:** normal and specular maps are untouched. A
+model trained on photographs invents *geometry* in a normal map rather than
+detail, and it reads as wrong under every light. Nothing about gameplay, physics
+or abilities is modified.
+
+**What is honestly unproven:** that a raised `TextureQuality` renders any
+differently, and that the shadows/postfx difference above is not partly camera
+position. Both are recorded as unverified rather than quietly claimed.
+
 ## AI texture upscaling
 
 Every diffuse texture in the multiplayer game is upscaled 2x through
