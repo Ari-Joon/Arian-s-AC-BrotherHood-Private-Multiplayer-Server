@@ -277,6 +277,16 @@ namespace QuazalWV
                     foreach (uint pid in reqSendInvitation.Invitation.Recipients)
                     {
                         invitee = Global.Clients.Find(c => c.User.Pid == pid);
+                        // Store the invitation ALWAYS, not only when the invitee is
+                        // offline. GetInvitationsReceived (case 14) reads from the
+                        // database, and the client calls it when it looks for its
+                        // invites - so a CONNECTED invitee that received only a
+                        // notification has nothing to accept. Observed exactly that
+                        // with a second client on one machine: it asked for its
+                        // invites, the table was empty, and it created its own lobby
+                        // instead of joining the one it was invited to.
+                        DbHelper.AddGameInvites(reqSendInvitation.Invitation.Key, client.User.Pid, pid,
+                                                reqSendInvitation.Invitation.Message);
                         if (invitee != null)
                             NotificationManager.GameInviteSent(invitee, client.User.Pid, reqSendInvitation.Invitation);
                         else if (Global.IsStandInBot(pid))
@@ -308,8 +318,6 @@ namespace QuazalWV
                                 NotificationManager.ParticipationChanged(
                                     client, pid, reqSendInvitation.Invitation.Key.SessionId, sub);
                         }
-                        else
-                            DbHelper.AddGameInvites(reqSendInvitation.Invitation.Key, client.User.Pid, pid, reqSendInvitation.Invitation.Message);
                     }
                     reply = new RMCPResponseEmpty();
                     RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);
@@ -351,6 +359,12 @@ namespace QuazalWV
                     reply = new RMCPResponseEmpty();
                     RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);
 
+                    // The invite has been answered, so drop it from the store.
+                    // Invites are now written for connected clients too, and
+                    // without this they would be replayed at the next logon and
+                    // point at a session that has long since ended.
+                    DbHelper.DeleteGameInvites(client.User.Pid);
+
                     // Join the accepting player to the host's session.
                     //
                     // Without this the server acknowledged the acceptance and told the
@@ -391,6 +405,11 @@ namespace QuazalWV
                     break;
                 case 18:
                     var reqDeclineInvite = (RMCPacketRequestGameSessionService_DeclineInvitation)rmc.request;
+                    // The invite has been answered, so drop it from the store.
+                    // Invites are now written for connected clients too, and
+                    // without this they would be replayed at the next logon and
+                    // point at a session that has long since ended.
+                    DbHelper.DeleteGameInvites(client.User.Pid);
                     reply = new RMCPResponseEmpty();
                     RMC.SendResponseWithACK(client.udp, p, rmc, client, reply);
                     // invite declined notif
