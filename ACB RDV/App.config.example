@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+﻿<?xml version="1.0"?>
 <configuration>
     <startup>
         <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8"/>
@@ -13,5 +13,11 @@
           adapter was assigned, e.g. 26.x.x.x. Rebuild after changing it.
         -->
         <add key="SecureServerAddress" value="YOUR.IP.HERE" />
+        <!-- Pad the participant count reported for a session, so a solo lobby
+             looks fuller than it is. 0 = off, and 0 is correct: this was tested
+             and does NOT unlock a solo private match. The launch gate reads the
+             client's own party roster ("not enough members in your group"), not
+             the session slot count. Kept as the evidence for that negative. -->
+        <add key="MinReportedSlots" value="0" />
     </appSettings>
 </configuration>

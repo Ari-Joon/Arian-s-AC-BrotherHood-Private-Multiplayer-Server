@@ -421,6 +421,53 @@ range, same block statistics.
 swizzle, in `DataPC.forge` as well as `DataPC_extra.forge`. They can be edited
 in place and repacked, with no DDS round-trip and no import step.
 
+## The private-lobby launch gate is CLIENT-side, on the party roster
+
+A private lobby refuses to start below a minimum player count, which makes
+eleven of the twelve maps unreachable alone — only the scripted introductory
+session runs solo. The client's own words:
+
+> There are not enough members in your **group** to play this mode in a PRIVATE
+> session.
+
+**Tested and ruled out: lying to the client about session slots.** The server
+was made to report six participants where one existed, for public and private
+sessions alike, and the log confirms it went out:
+
+```
+Slot padding: reporting 6 participants where 1 exist
+Session 1 slots now: public=0 private=6 (real pub=0 priv=1)
+```
+
+LAUNCH stayed grey. So the gate does **not** read `CurrentPublicSlots` /
+`CurrentPrivateSlots`; it reads the **party roster** — the FREE FRIEND SLOT rows
+— which the client maintains itself. `Global.MinReportedSlots` is left in place,
+defaulting to 0, because the code is the evidence for the negative.
+
+**Every game mode behaves the same.** Cycling GAME MODE changes nothing: all of
+them fall back to searching for online players. There is no mode with a minimum
+of one.
+
+**Two false negatives happened first, and both looked like results.** The first
+test padded only PRIVATE sessions while the lobby created was `[IsPrivate: 0]
+[Type: PUBLIC]`, so the code never ran. The second could not be observed at all,
+because the log only dumped the props the CLIENT sent in `CreateSession` and
+never what the server held — `CurrentPublicSlots` appeared **zero** times in the
+whole log. Both rounds returned "still grey", which reads exactly like a tested
+conclusion. Only after adding a log line to `UpdateCurrentSlots` did the test
+become falsifiable.
+
+**Why a binary patch is not the next afternoon's work.** The message is not in
+`ACBMP.exe` in either encoding, and `localization.lang` is a **14-byte stub** —
+the UI text lives inside the forges. Tracing "string to the comparison that
+shows it" therefore runs through the container codec first.
+
+**What is left:** real players (the gate is a count, and a real second player may
+satisfy some modes), or bot clients, which is the same blocker as everything
+else. The command line registers `gamemode`, `startupmission` and `missionroot`,
+and `wanted` appears in the binary as a string, so a mode may be selectable
+without the lobby — untested.
+
 ## The single-instance guard, decoded — and why it does not explain what we see
 
 `ACBMP.exe` creates a named semaphore at startup and gives up if it already

@@ -165,20 +165,55 @@ namespace QuazalWV
             var currPublicSlots = GameSession.Attributes.Find(param => param.Id == (uint)SessionParam.CurrentPublicSlots);
             if (currPublicSlots == null)
             {
-                GameSession.Attributes.Add(new Property((uint)SessionParam.CurrentPublicSlots, (uint)PublicPids.Count));
+                GameSession.Attributes.Add(new Property((uint)SessionParam.CurrentPublicSlots, Reported((uint)PublicPids.Count)));
                 Log.WriteLine(1, $"Session {Key.SessionId} missing public slots param", LogSource.Session, Color.Red);
             }
             else
-                currPublicSlots.Value = (uint)PublicPids.Count;
+                currPublicSlots.Value = Reported((uint)PublicPids.Count);
 
             var currPrivateSlots = GameSession.Attributes.Find(param => param.Id == (uint)SessionParam.CurrentPrivateSlots);
             if (currPrivateSlots == null)
             {
-                GameSession.Attributes.Add(new Property((uint)SessionParam.CurrentPrivateSlots, (uint)PrivatePids.Count));
+                GameSession.Attributes.Add(new Property((uint)SessionParam.CurrentPrivateSlots, Reported((uint)PrivatePids.Count)));
                 Log.WriteLine(1, $"Session {Key.SessionId} missing private slots param", LogSource.Session, Color.Red);
             }
             else
-                currPrivateSlots.Value = (uint)PrivatePids.Count;
+                currPrivateSlots.Value = Reported((uint)PrivatePids.Count);
+
+            // Log what the SERVER now holds. The log previously only dumped the
+            // props the CLIENT sent in CreateSession, so there was no way to
+            // tell whether a server-side change had reached the wire - the test
+            // was unfalsifiable from the log alone.
+            var pub = FindProp(SessionParam.CurrentPublicSlots);
+            var priv = FindProp(SessionParam.CurrentPrivateSlots);
+            Log.WriteLine(1, $"Session {Key.SessionId} slots now: public={pub?.Value} " +
+                             $"private={priv?.Value} (real pub={PublicPids.Count} priv={PrivatePids.Count})",
+                          LogSource.Session, Color.Orange);
+        }
+
+        /// <summary>
+        /// A participant count as told to the CLIENT, padded up to
+        /// Global.MinReportedSlots when that is set.
+        ///
+        /// Applies to PUBLIC and PRIVATE alike. The first version of this
+        /// padded only private sessions, and the first test of it hosted a
+        /// PUBLIC match - so the experiment silently did not run and the grey
+        /// LAUNCH button proved nothing. The session log is what showed it:
+        /// [IsPrivate: 0] [Type: PUBLIC].
+        ///
+        /// Never used for join capacity. IsJoinable reads the same property but
+        /// compares it against MaxSlots (8), and padding to 6 leaves room, so
+        /// real players can still join.
+        /// </summary>
+        private static uint Reported(uint real)
+        {
+            if (Global.MinReportedSlots == 0 || real == 0)
+                return real;
+            var padded = real < Global.MinReportedSlots ? Global.MinReportedSlots : real;
+            if (padded != real)
+                Log.WriteLine(1, $"Slot padding: reporting {padded} participants where {real} exist",
+                              LogSource.Session, Color.Orange);
+            return padded;
         }
 
         public Property FindProp(SessionParam id)
