@@ -623,6 +623,49 @@ or abilities is modified.
 differently, and that the shadows/postfx difference above is not partly camera
 position. Both are recorded as unverified rather than quietly claimed.
 
+## Characters stay VANILLA: the repack is lossy for everything
+
+**The persona archives cannot be safely rebuilt with this tooling, so they are
+left untouched.** This is a negative result and it is load-bearing - without it
+somebody will try the obvious thing again and ship broken characters.
+
+The symptom was Dama Rossa rendering with no arms beyond ~10 m and as a bare
+torso up close. Her models were byte-identical to vanilla at the time, so it was
+not the models - an upscaled texture failed to load and the engine culled the
+meshes that used it.
+
+**The proof that the repack itself is at fault:**
+
+| Container | Vanilla | After repack | Kept | Did we modify it? |
+|---|---|---|---|---|
+| `LocalizationPackage_English` | 317,792 | 305,994 | 96.3% | **no - it has no textures** |
+| `LocalizationPackage_Japanese` | 273,960 | 263,491 | 96.2% | **no** |
+| `AC2MP_ID31_Top` | 2,600,194 | 2,544,283 | 97.8% | textures only |
+| `AC2MP_ID32_MainTemplate_Player` | 3,833,796 | 849,778 | **22%** | textures only |
+| `DLCPackageDescriptor` | 113,066 | 852 | **1%** | no |
+
+Containers we never touched still lose data. AnvilToolkit reads every resource
+and writes back less than it read - typically 2-4%, and up to 78% on
+model-heavy containers - with no error. Our upscaling does not cause it; any
+repack at all does.
+
+That also explains why the damage hid for so long: a `MainTemplate` holds the
+character's textures AND its model, so upscaled textures grew those containers
+enough to mask the model loss. Only the containers that shrank ON BALANCE ever
+looked wrong.
+
+`anvil-repack` refuses a repack that comes out below 95% of the original, which
+catches the catastrophic cases. It CANNOT make this safe - a 3% loss passes, and
+a container can grow while still having lost its model.
+
+**What is done instead:** the 13 map forges keep their upscale and look correct;
+the persona archives stay vanilla. Characters are at stock resolution with
+correct models, which is the right side of that trade. Improving character
+fidelity needs a repacker that round-trips faithfully, which AnvilToolkit is
+not.
+
+---
+
 ## Character models: why personas are upscaled but not repacked whole
 
 **Every `MainTemplate` container in the persona archives is lossy to repack.**
