@@ -623,6 +623,55 @@ or abilities is modified.
 differently, and that the shadows/postfx difference above is not partly camera
 position. Both are recorded as unverified rather than quietly claimed.
 
+## Character models: why personas are upscaled but not repacked whole
+
+**Every `MainTemplate` container in the persona archives is lossy to repack.**
+AnvilToolkit reads all of a container's resources and writes back a fraction of
+the data, with no error:
+
+| Container | Vanilla | Repacked | Kept |
+|---|---|---|---|
+| `ID28_MainTemplate_Player` | 4,070,556 | 740,596 | 18% |
+| `ID32_MainTemplate_Player` | 3,833,796 | 849,778 | 22% |
+| `ID25_MainTemplate_Player` | 7,618,081 | 2,551,633 | 33% |
+| `ID14_MainTemplate_Player` | 5,175,816 | 2,353,863 | 45% |
+| `DLCPackageDescriptor` | 113,066 | 852 | **1%** |
+
+This shipped once. The symptom was Dama Rossa (`ID32`) rendering as a floating
+torso, and the first diagnosis was that only ID32 and ID31 were affected because
+they were the only two that visibly SHRANK. That was wrong: a MainTemplate holds
+the character's textures as well as its model, so on the upscaled run the larger
+textures grew those containers enough to **mask** the model data being lost.
+Every persona was losing model data; ID32 simply lost more than its textures
+gained.
+
+**How it is handled.** `anvil-repack` refuses any repack that comes out below 95%
+of the original and keeps the original. The persona run then produces:
+
+- character models **byte-identical to vanilla** - verified, 0 of 14 altered
+- 112 containers carrying upscaled textures
+- 76 of 78 upscaled textures kept; the 2 inside refused containers stay vanilla
+
+So personas get upscaled textures and intact models. The cost is small and the
+alternative is broken characters.
+
+**Running it:**
+
+```
+python tools	exture-upscaleatch.py --prefix DataPC_skins_ --min-width 128
+```
+
+`--prefix` is required - the default prefixes cover only the map forges, and
+`--only` is applied AFTER that filter, so `--only skins` silently matches
+nothing. `--min-width 128` skips the ten 4x4 and five 8x8 maps, which are lookup
+data rather than surfaces.
+
+**Also note:** 37 of 202 containers never unpack at all. They are hash-named
+(`00000000610A41C8.data`) and are skipped, so they stay vanilla - a known limit,
+not new damage.
+
+---
+
 ## Graphics: the antialiasing trade-off
 
 **We turn MSAA OFF on purpose, to get ambient occlusion instead.** That is a
