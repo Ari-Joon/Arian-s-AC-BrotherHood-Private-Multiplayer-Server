@@ -393,7 +393,12 @@ if ($VramStreaming -ne 'default') {
 if ($LoadOnDemand   -ne 'default') { $argv += "/loadondemand:$LoadOnDemand" }
 if ($PreloadShaders -ne 'default') { $argv += "/preloadshaders:$PreloadShaders" }
 if ($UserIndex -ge 0) { $argv += "/userindex:$UserIndex" }
-foreach ($c in $PbCvar) {
+# Split on commas as well as accepting an array. Invoked as
+# 'powershell -File', arguments arrive as literal strings and PowerShell's
+# array syntax does NOT apply, so -PbCvar "a 1","b 2" lands as ONE string -
+# which silently produced the cvar value "0,lan 1".
+$pbList = @()
+foreach ($c in $PbCvar) { $pbList += ($c -split ',') }foreach ($c in $pbList) {
     if (-not $c) { continue }
     # "enablekicks 0" -> /pb_sv_enablekicks 0 as TWO argv entries, because that
     # is how a cvar and its value are conventionally passed.
