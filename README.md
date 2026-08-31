@@ -623,6 +623,51 @@ or abilities is modified.
 differently, and that the shadows/postfx difference above is not partly camera
 position. Both are recorded as unverified rather than quietly claimed.
 
+## Graphics: the antialiasing trade-off
+
+**We turn MSAA OFF on purpose, to get ambient occlusion instead.** That is a
+deliberate choice and it is worth understanding before you undo it.
+
+The engine's own lighting is maxed out and cannot go further:
+
+| Setting | Value | Why it stops there |
+|---|---|---|
+| `ShadowQuality` | 4 | measured ceiling; the game rewrites anything higher back down |
+| `EnvironmentQuality` | 5 | measured ceiling |
+| `PostFX` | 1 | an on/off enum, not a scale |
+| `/lightmode` | never passed | its "full" is `FullBright` - a debug view with lighting REMOVED |
+
+So better shadows and lighting have to come from outside the engine, and for a
+Direct3D 9 game that means [ReShade](https://reshade.me/) with
+[MXAO](https://www.martysmods.com/mxao/) - real screen-space ambient occlusion
+and contact shadows the 2010 renderer never drew.
+
+**MXAO needs the depth buffer, and MSAA denies it.** With multisampling on, the
+shader gets nothing and silently does nothing. You cannot have both.
+
+| | MSAA 8x | MSAA off + ReShade |
+|---|---|---|
+| Edges | hardware-clean | SMAA - slightly softer |
+| Ambient occlusion | none | full MXAO |
+| Contact shadows | none | yes |
+| Depth and grounding | flat | substantially better |
+
+We take the second. Edge quality is a small loss at 2560x1600; grounded
+characters and occluded corners are a large gain, and they help far more on a
+game whose lighting model is fifteen years old. Set `MultiSampleType=0` in
+`Saved Games\Assassin's Creed Brotherhood\ACBrotherhood.ini` and enable SMAA in
+ReShade.
+
+**Frame generation is available too, free.** The game is DX9, so DLSS is out -
+it needs DX11/12/Vulkan plus motion vectors from the engine, none of which
+exist here, and that is also why the NVIDIA App cannot see `ACBMP.exe` at all.
+The way round it is two free layers: [DXVK](https://github.com/doitsujin/dxvk)
+translates D3D9 to Vulkan (drop the **x32** `d3d9.dll` beside `ACBMP.exe` - the
+game is 32-bit), and NVIDIA **Smooth Motion** does driver-level frame
+generation on Vulkan for RTX 40/50 cards.
+
+---
+
 ## AI texture upscaling
 
 Every diffuse texture in the multiplayer game is upscaled 2x through
