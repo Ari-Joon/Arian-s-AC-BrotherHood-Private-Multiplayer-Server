@@ -74,6 +74,26 @@ param(
     # the bot keeps its own settings and can be bound to its own controller.
     [switch]$BotClient,
 
+    # PunkBuster server cvars, passed straight through.
+    #
+    # ACBMP.exe carries the "/pb_sv_" PREFIX in its argument table, so anything
+    # starting with it is forwarded to PunkBuster's server module rather than
+    # parsed as a game switch. ws001802.dll exposes 44 such cvars, and three
+    # matter for a private server:
+    #
+    #   enablekicks 0   stop PunkBuster kicking anyone
+    #   enable 0        turn its server enforcement off entirely
+    #   lan 1           LAN mode, which is what this actually is
+    #
+    # This is the sanctioned way to configure PB on a server you own, and it is
+    # the only remaining route to running two clients on one machine: PunkBuster
+    # tracks per-MACHINE, so the second instance is refused however it is named -
+    # tested with a separate executable and it was ejected immediately.
+    #
+    # Comma-separated, NOT a repeated flag:
+    #   -PbCvar "enablekicks 0","lan 1"
+    [string[]]$PbCvar,
+
     # Print the command line that would be used, and launch nothing.
     [switch]$DryRun,
     [string]$GamePath,
@@ -373,6 +393,14 @@ if ($VramStreaming -ne 'default') {
 if ($LoadOnDemand   -ne 'default') { $argv += "/loadondemand:$LoadOnDemand" }
 if ($PreloadShaders -ne 'default') { $argv += "/preloadshaders:$PreloadShaders" }
 if ($UserIndex -ge 0) { $argv += "/userindex:$UserIndex" }
+foreach ($c in $PbCvar) {
+    if (-not $c) { continue }
+    # "enablekicks 0" -> /pb_sv_enablekicks 0 as TWO argv entries, because that
+    # is how a cvar and its value are conventionally passed.
+    $parts = $c.Trim() -split '\s+', 2
+    $argv += "/pb_sv_$($parts[0])"
+    if ($parts.Count -gt 1) { $argv += $parts[1] }
+}
 foreach ($sw in $Switch) {
     if ($sw) { $argv += "/" + $sw.TrimStart('/') }
 }
