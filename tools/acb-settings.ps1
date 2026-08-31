@@ -209,10 +209,10 @@ $form                 = New-Object Windows.Forms.Form
 $form.Text            = "Assassin's Creed Brotherhood"
 # Tall enough for every section, but never taller than the screen: on a
 # 1080p display the full 1060 would put the PLAY button under the taskbar.
-$form.MinimumSize = New-Object Drawing.Size(496, 420)
-$wantH = 1060
+$form.MinimumSize = New-Object Drawing.Size(1020, 460)
+$wantH = 760
 $availH = [int]([Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 60)
-$form.ClientSize      = New-Object Drawing.Size(470, ([Math]::Min($wantH, $availH)))
+$form.ClientSize      = New-Object Drawing.Size(1000, ([Math]::Min($wantH, $availH)))
 $form.StartPosition   = 'CenterScreen'
 $form.FormBorderStyle = 'Sizable'
 $form.MaximizeBox     = $true
@@ -250,12 +250,16 @@ function Style-Combo($c) {
 }
 
 # One labelled dropdown row, with a short note to the right of the label.
-function Add-Row($label, $note, $y, $values, $current) {
-    [void](Add-Text $label 34 ($y + 4) $fBody $cText)
-    if ($note) { [void](Add-Text $note 34 ($y + 22) $fSmall $cMuted) }
+function Add-Row($label, $note, $y, $values, $current, $x = 34) {
+    # $x is the COLUMN ORIGIN. The window is two columns wide now: the left one
+    # starts at 34, the right at $COL2. The dropdown sits a fixed distance in
+    # from whichever origin it was given, so a row does not need to know which
+    # column it is in.
+    [void](Add-Text $label $x ($y + 4) $fBody $cText)
+    if ($note) { [void](Add-Text $note $x ($y + 22) $fSmall $cMuted) }
     $c = New-Object Windows.Forms.ComboBox
-    $c.Location = New-Object Drawing.Point(268, $y)
-    $c.Size = New-Object Drawing.Size(168, 28)
+    $c.Location = New-Object Drawing.Point(($x + 216), $y)
+    $c.Size = New-Object Drawing.Size(200, 28)
     Style-Combo $c
     foreach ($v in $values) { [void]$c.Items.Add($v) }
     $c.SelectedItem = $(if ($current -and $c.Items.Contains($current)) { $current } else { $values[0] })
@@ -263,10 +267,14 @@ function Add-Row($label, $note, $y, $values, $current) {
     return $c
 }
 
+# Right-hand column origin. Everything tall lives here so the window is
+# landscape rather than a 1,100px ribbon.
+$COL2 = 520
+
 # --- header ------------------------------------------------------------------
 [void](Add-Text "BROTHERHOOD"               30 22 $fH1  $cText)
 [void](Add-Text "Private multiplayer server" 32 58 $fSub $cMuted)
-Add-Rule 30 92 410
+Add-Rule 30 92 420
 
 # --- display -----------------------------------------------------------------
 [void](Add-Text "DISPLAY" 30 108 $fHead $cAccent)
@@ -292,7 +300,7 @@ foreach ($m in $modes) {
 $resLabel = Add-Text "Resolution" 30 194 $fBody $cMuted
 $resBox = New-Object Windows.Forms.ComboBox
 $resBox.Location = New-Object Drawing.Point(34, 218)
-$resBox.Size = New-Object Drawing.Size(260, 28)
+$resBox.Size = New-Object Drawing.Size(416, 28)
 Style-Combo $resBox
 foreach ($r in $resList) { [void]$resBox.Items.Add($r) }
 if ($cfg.Resolution -and $resBox.Items.Contains($cfg.Resolution)) {
@@ -300,24 +308,24 @@ if ($cfg.Resolution -and $resBox.Items.Contains($cfg.Resolution)) {
 } else { $resBox.SelectedIndex = 0 }
 $form.Controls.Add($resBox)
 
-Add-Rule 30 256 410
+Add-Rule $COL2 92 440
 
 # --- image quality -----------------------------------------------------------
-[void](Add-Text "IMAGE QUALITY" 30 272 $fHead $cAccent)
-[void](Add-Text "Passed on the command line. 'default' leaves the switch off entirely." 32 292 $fSmall $cMuted)
+[void](Add-Text "IMAGE QUALITY" $COL2 108 $fHead $cAccent)
+[void](Add-Text "Passed on the command line. 'default' leaves the switch off entirely." ($COL2 + 2) 128 $fSmall $cMuted)
 
-$shadowBox = Add-Row "Shadows"          "unmeasured"                 316 @('default','off','normal','full')        $cfg.Shadows
-$postBox   = Add-Row "Post-processing"  "unmeasured"                 364 @('default','off','normal','full')        $cfg.PostFX
-$msaaBox   = Add-Row "Anti-aliasing"    "MSAA level"                 412 @('default','none','2x','4x','6x','8x')   $cfg.MSAA
-$mipsBox   = Add-Row "Full mip chains"  "+109 MB - no in-game equivalent"  460 @('default','on','off')             $cfg.FullMips
-$atlasBox  = Add-Row "Atlas mipmaps"    "+111 MB - likely the same effect" 508 @('default','on','off')             $cfg.AtlasMips
-$aoBox     = Add-Row "Ambient occlusion" "contact shadowing - no in-game equivalent" 556 @('default','on','off')   $cfg.AmbientOcclusion
-$farBox    = Add-Row "Draw distance"    "no in-game equivalent"      604 @('default','5000','10000','20000')       $(if ($cfg.FarDist -gt 0) { "$($cfg.FarDist)" } else { 'default' })
+$shadowBox = Add-Row "Shadows"          "unmeasured"                 152 @('default','off','normal','full')        $cfg.Shadows $COL2
+$postBox   = Add-Row "Post-processing"  "unmeasured"                 200 @('default','off','normal','full')        $cfg.PostFX $COL2
+$msaaBox   = Add-Row "Anti-aliasing"    "MSAA level"                 248 @('default','none','2x','4x','6x','8x')   $cfg.MSAA $COL2
+$mipsBox   = Add-Row "Full mip chains"  "+109 MB - no in-game equivalent"  296 @('default','on','off')             $cfg.FullMips $COL2
+$atlasBox  = Add-Row "Atlas mipmaps"    "+111 MB - likely the same effect" 344 @('default','on','off')             $cfg.AtlasMips $COL2
+$aoBox     = Add-Row "Ambient occlusion" "contact shadowing - no in-game equivalent" 392 @('default','on','off')   $cfg.AmbientOcclusion $COL2
+$farBox    = Add-Row "Draw distance"    "no in-game equivalent"      440 @('default','5000','10000','20000')       $(if ($cfg.FarDist -gt 0) { "$($cfg.FarDist)" } else { 'default' }) $COL2
 
-Add-Rule 30 648 410
+Add-Rule $COL2 484 440
 
 # --- what the game itself is set to ------------------------------------------
-[void](Add-Text "IN-GAME SETTINGS" 30 664 $fHead $cAccent)
+[void](Add-Text "IN-GAME SETTINGS" 30 272 $fHead $cAccent)
 $iniBits = @()
 foreach ($k in $CEILINGS.Keys) {
     if ($ini.Contains($k)) {
@@ -330,19 +338,19 @@ foreach ($k in $ENUMS) {
 }
 if ($iniBits.Count) {
     [void](Add-Text (($iniBits -join '   ') -replace '(.{62}\S*)\s', "`$1`n") 32 686 $fSmall $cMuted)
-    [void](Add-Text "Read-only. No command-line switch reaches these. The game reads`nthem at startup but clamps above-maximum values when it writes, and whether a`nhigher value renders differently is not yet verified." 32 722 $fSmall $cMuted)
+    [void](Add-Text "Read-only. No command-line switch reaches these. The game reads`nthem at startup but clamps above-maximum values when it writes, and whether a`nhigher value renders differently is not yet verified." 32 330 $fSmall $cMuted)
 } else {
-    [void](Add-Text "No [Graphics] section found - launch the game once." 32 686 $fSmall $cMuted)
+    [void](Add-Text "No [Graphics] section found - launch the game once." 32 294 $fSmall $cMuted)
 }
 
-Add-Rule 30 756 410
+Add-Rule 30 364 420
 
 # --- account -----------------------------------------------------------------
-[void](Add-Text "ACCOUNT" 30 772 $fHead $cAccent)
+[void](Add-Text "ACCOUNT" 30 380 $fHead $cAccent)
 
 $uBox = New-Object Windows.Forms.ComboBox
-$uBox.Location = New-Object Drawing.Point(34, 796)
-$uBox.Size = New-Object Drawing.Size(260, 28)
+$uBox.Location = New-Object Drawing.Point(34, 404)
+$uBox.Size = New-Object Drawing.Size(200, 28)
 Style-Combo $uBox
 foreach ($a in $accounts) { [void]$uBox.Items.Add($a) }
 $uBox.SelectedItem = $(if ($cfg.User -and $accounts -contains $cfg.User) { $cfg.User } else { $accounts[0] })
@@ -395,8 +403,8 @@ function Show-NamePrompt($current) {
 
 $renameBtn = New-Object Windows.Forms.Button
 $renameBtn.Text = "Rename"
-$renameBtn.Location = New-Object Drawing.Point(308, 795)
-$renameBtn.Size = New-Object Drawing.Size(132, 30)
+$renameBtn.Location = New-Object Drawing.Point(250, 403)
+$renameBtn.Size = New-Object Drawing.Size(200, 30)
 $renameBtn.Font = $fBody
 $renameBtn.FlatStyle = 'Flat'
 $renameBtn.BackColor = $cPanel
@@ -446,17 +454,17 @@ $renameBtn.Add_Click({
 #
 # "default" means the values the game shipped with, restored from a pristine
 # backup rather than scaled back up - so nothing drifts after repeated changes.
-Add-Rule 30 838 410
-[void](Add-Text "MATCH RULES" 30 854 $fHead $cAccent)
-[void](Add-Text "Applied by the host. Everyone who joins plays by these." 32 874 $fSmall $cMuted)
+Add-Rule 30 446 420
+[void](Add-Text "MATCH RULES" 30 462 $fHead $cAccent)
+[void](Add-Text "Applied by the host. Everyone who joins plays by these." 32 482 $fSmall $cMuted)
 
 # A whole page for abilities: every one the game has, with its own parameters.
 # Host only - it edits the settings file the SERVER hands out, so it would do
 # nothing on a joining player's machine.
 $skillsBtn = New-Object Windows.Forms.Button
 $skillsBtn.Text = "Customise abilities..."
-$skillsBtn.Location = New-Object Drawing.Point(34, 898)
-$skillsBtn.Size = New-Object Drawing.Size(200, 32)
+$skillsBtn.Location = New-Object Drawing.Point(34, 506)
+$skillsBtn.Size = New-Object Drawing.Size(280, 32)
 $skillsBtn.Font = $fBody
 $skillsBtn.FlatStyle = 'Flat'
 $skillsBtn.BackColor = $cPanel
@@ -464,7 +472,7 @@ $skillsBtn.ForeColor = $cText
 $skillsBtn.FlatAppearance.BorderColor = [Drawing.Color]::FromArgb(74, 74, 86)
 $skillsBtn.Cursor = 'Hand'
 $form.Controls.Add($skillsBtn)
-[void](Add-Text "22 abilities, every parameter, and unlock-everything" 34 934 $fSmall $cMuted)
+[void](Add-Text "22 abilities, every parameter, and unlock-everything" 34 542 $fSmall $cMuted)
 $skillsBtn.Add_Click({
     $ed = Join-Path $PSScriptRoot "skills-editor.ps1"
     if (Test-Path $ed) {
@@ -477,18 +485,18 @@ if (-not $isHost) {
     $skillsBtn.ForeColor = $cMuted
 }
 
-$cdBox = Add-Row "Ability cooldowns" "lower recharges faster" 962 @('default','0.75x','0.5x','0.25x','0.1x') $cfg.CooldownScale
-$duBox = Add-Row "Ability durations" "how long an ability lasts" 1010 @('default','1.25x','1.5x','2x')      $cfg.DurationScale
+$cdBox = Add-Row "Ability cooldowns" "lower recharges faster" 570 @('default','0.75x','0.5x','0.25x','0.1x') $cfg.CooldownScale
+$duBox = Add-Row "Ability durations" "how long an ability lasts" 618 @('default','1.25x','1.5x','2x')      $cfg.DurationScale
 
 # --- textures -----------------------------------------------------------------
 # The game reads its forges at STARTUP, so this must happen before launch. An
 # in-game toggle would need the client's UI patched. Switching is a file copy
 # between two prepared sets, so it costs seconds rather than a rebuild's hours.
-Add-Rule 30 1056 410
-[void](Add-Text "TEXTURES" 30 1072 $fHead $cAccent)
-[void](Add-Text "Swapped before launch. 'leave as-is' touches nothing." 32 1092 $fSmall $cMuted)
-$texBox = Add-Row "Texture set" "vanilla vs 2x AI upscale" 1120 @('leave as-is','Upscaled','Vanilla') $cfg.TextureSet
-$texNote = Add-Text "" 34 1164 $fSmall $cMuted
+Add-Rule 30 664 420
+[void](Add-Text "TEXTURES" 30 680 $fHead $cAccent)
+[void](Add-Text "Swapped before launch. 'leave as-is' touches nothing." 32 700 $fSmall $cMuted)
+$texBox = Add-Row "Texture set" "vanilla vs 2x AI upscale" 728 @('leave as-is','Upscaled','Vanilla') $cfg.TextureSet
+$texNote = Add-Text "" 34 772 $fSmall $cMuted
 
 # Say what is actually available rather than offering a switch that fails.
 $setsDir = Join-Path $game "multi\_texture_sets"
@@ -502,8 +510,8 @@ if ($haveV -eq 0 -or $haveU -eq 0) {
 
 $resetBtn = New-Object Windows.Forms.Button
 $resetBtn.Text = "Reset to defaults"
-$resetBtn.Location = New-Object Drawing.Point(268, 850)
-$resetBtn.Size = New-Object Drawing.Size(172, 30)
+$resetBtn.Location = New-Object Drawing.Point(250, 458)
+$resetBtn.Size = New-Object Drawing.Size(200, 30)
 $resetBtn.Font = $fBody
 $resetBtn.FlatStyle = 'Flat'
 $resetBtn.BackColor = $cPanel
@@ -557,7 +565,7 @@ $form.Controls.Add($bottom)
 $btn = New-Object Windows.Forms.Button
 $btn.Text = "PLAY"
 $btn.Location = New-Object Drawing.Point(30, 7)
-$btn.Size = New-Object Drawing.Size(410, 46)
+$btn.Size = New-Object Drawing.Size(940, 46)
 $btn.Font = $fBtn
 $btn.FlatStyle = 'Flat'
 $btn.BackColor = $cAccent
@@ -669,6 +677,17 @@ foreach ($c in $scroll.Controls) {
     if ($b -gt $contentBottom) { $contentBottom = $b }
 }
 $scroll.AutoScrollMinSize = New-Object Drawing.Size(0, ($contentBottom + 16))
+
+# Size the window to the content NOW, rather than to a guessed constant. $wantH
+# was a hand-tuned number for the old single-column layout, and every time the
+# layout changed it went stale and the last rows were cut off. Measuring after
+# the fact cannot go stale.
+#
+# Still capped to the screen: on a short display the window stops growing and
+# the panel scrolls instead, which is what the scrolling is for.
+$needed = $contentBottom + 16 + $bottom.Height
+$maxH   = [int]([Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 60)
+$form.ClientSize = New-Object Drawing.Size($form.ClientSize.Width, ([Math]::Min($needed, $maxH)))
 
 # A WinForms Panel is not selectable, so it never takes keyboard focus and the
 # wheel messages go to whatever does. The scrollbar appears and nothing moves,
