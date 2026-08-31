@@ -634,11 +634,17 @@ and is not possible, so the reasoning is recorded here rather than rediscovered.
 |---|---|---|---|
 | **Upscaled map textures** (13 forges) | large - the city is most of the screen | ~800 MB disk, hours of GPU | needs running the pipeline yourself |
 | **Supersampling** (NVIDIA DSR / AMD VSR, 4x) | large - fixes edges, shimmer, distance | GPU load | **yes** - NVIDIA, AMD and Intel all have it |
-| **ReShade + MXAO** | large - ambient occlusion and contact shadows the engine never drew | one shader's cost; needs MSAA off | **yes** - vendor neutral |
+| ~~ReShade + MXAO~~ | ambient occlusion the engine never drew | **removed - see below** | n/a |
 | **In-game settings at their ceilings** | moderate | none | **yes** |
 | **16x anisotropic filtering** | moderate - sharp ground textures at angles | none | **yes**, but see the profile note |
 
-**Antialiasing is deliberately OFF.** MXAO needs the depth buffer and D3D9 will
+**ReShade was tried and REMOVED.** MXAO does draw ambient occlusion the engine
+never had, but it was less stable and less pleasing in practice than the
+configuration without it, and it forces a real trade - see below. The files are
+kept in `_reshade_removed` rather than deleted. Antialiasing is back ON (MSAA
+8x) now that nothing needs the depth buffer.
+
+**The antialiasing trade only applies WITH ReShade.** MXAO needs the depth buffer and D3D9 will
 not provide one while multisampling is on, so it is one or the other. With
 supersampling at 4x the edges are already better than MSAA gave, and ambient
 occlusion is the larger gain. `tools/reshade-prep.ps1` toggles it.
@@ -667,11 +673,17 @@ runs comfortably, and DXVK claims the same `d3d9.dll` that ReShade needs.
 **SMAA.** Not installed. At 4x supersampling it would soften an image we paid 4x
 the pixels for.
 
-**Crowd density and variety.** Not reachable. The only crowd entries in the
-server-authoritative `.cxb` are `CrowdBandwidth_*`, which govern network
-synchronisation rather than population; the counts live as compiled binary
-inside the map forges, and any forge repack loses data. `tools/crowd-patch.py`
-is an experiment against the attribute names, not a fix.
+**Crowd density - this one WORKED.** The population counts are compiled binary
+inside the map forges and are not editable, and the only crowd entries in the
+`.cxb` are `CrowdBandwidth_*` which govern network synchronisation. But
+defaulting those synchronisation gates in the executable visibly raises the
+crowd: `tools/crowd-patch.py` renames `CrowdBandwidth_AllowBandwidthManagement`,
+`_AvoidSpawningBelowQuality` and `_TryToMigrateBelowQuality` so each falls back
+to its constructor default, and the throttling stops. Confirmed in game.
+
+`MaxPlayersWithSameSkin` was tried in the same pass for persona variety and is
+NOT kept: variety did not visibly change and characters began rendering as bare
+torsos, which is what that attribute pairing controls. Left vanilla.
 
 **Shadow and lighting settings.** Already at their measured ceilings -
 `ShadowQuality` 4, `EnvironmentQuality` 5 - and the game rewrites anything higher
