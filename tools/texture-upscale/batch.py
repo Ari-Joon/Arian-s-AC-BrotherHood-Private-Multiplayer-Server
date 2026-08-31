@@ -64,7 +64,35 @@ def width_of(path):
         return struct.unpack_from('<I', f.read(96), 10)[0]
 
 
-def collect(only=None, prefixes=DEFAULT_PREFIXES):
+# WHICH UPSCALER EACH MAP TYPE GETS, and why it is not the same one.
+#
+# A diffuse map is a picture, so an AI upscaler trained on photographs is the
+# right tool and invents plausible detail.
+#
+# A NORMAL map is not a picture. Its RGB encodes a surface direction vector, so
+# invented detail decodes to surface angles that were never there and the
+# lighting goes subtly wrong - sharper and less correct. Normals get a plain
+# Lanczos resample instead, which interpolates the vectors rather than
+# imagining them.
+#
+# Specular/gloss maps are material data on the same argument, so they take the
+# same treatment.
+MAP_TYPES = {
+    'diffuse':  ('*DiffuseMap*.TextureMap',  'ai'),
+    'normal':   ('*NormalMap*.TextureMap',   'lanczos'),
+    'specular': ('*SpecularMap*.TextureMap', 'lanczos'),
+}
+
+
+def method_for(path):
+    """Which upscaler this file should get, by map type."""
+    n = os.path.basename(path).lower()
+    if 'normalmap' in n or 'specularmap' in n:
+        return 'lanczos'
+    return 'ai'
+
+
+def collect(only=None, prefixes=DEFAULT_PREFIXES, kinds=('diffuse',)):
     out = []
     for d in sorted(os.listdir(EXTRACTED)):
         if not any(d.startswith(p) for p in prefixes):
@@ -72,9 +100,10 @@ def collect(only=None, prefixes=DEFAULT_PREFIXES):
         if only and only.lower() not in d.lower():
             continue
         root = os.path.join(EXTRACTED, d, "Extracted")
-        out += sorted(glob.glob(os.path.join(root, "**", "*DiffuseMap*.TextureMap"),
-                                recursive=True))
-    return out
+        for k in kinds:
+            pat = MAP_TYPES[k][0]
+            out += sorted(glob.glob(os.path.join(root, "**", pat), recursive=True))
+    return sorted(set(out))
 
 
 def main():
@@ -88,14 +117,41 @@ def main():
                          "not surfaces - upscaling those gains nothing and risks "
                          "changing how they are sampled. 128 is sensible there; "
                          "the default of 0 keeps the map behaviour unchanged.")
+    ap.add_argument('--maps', default='diffuse',
+                    help="comma-separated map types: diffuse, normal, specular. "
+                         "Diffuse gets the AI model; normal and specular get "
+                         "Lanczos, because their RGB encodes vectors and material "
+                         "values rather than a picture.")
+    ap.add_argument('--max-output', type=int, default=0,
+                    help="skip a texture if doubling it would exceed this width. "
+                         "Character textures are 1024 and become 2048, and a "
+                         "persona whose 2048 maps were applied rendered with body "
+                         "parts missing while its models were byte-identical to "
+                         "vanilla - so the engine appears to reject them and cull "
+                         "the meshes that use them. 1024 keeps the 256 and 512 "
+                         "gains and leaves the 1024s alone. 0 = no cap.")
     ap.add_argument('--prefix', action='append',
                     help="forge name prefix to walk; repeatable. "
                          "Defaults to the multiplayer maps.")
     a = ap.parse_args()
 
     print("below-normal priority: %s" % deprioritise(), flush=True)
-    targets = collect(a.only, tuple(a.prefix) if a.prefix else DEFAULT_PREFIXES)
+    kinds = tuple(k.strip() for k in a.maps.split(',') if k.strip() in MAP_TYPES)
+    if not kinds:
+        sys.exit("--maps must name at least one of: %s" % ", ".join(MAP_TYPES))
+    targets = collect(a.only, tuple(a.prefix) if a.prefix else DEFAULT_PREFIXES, kinds)
     print("%d diffuse textures found" % len(targets), flush=True)
+    if a.max_output:
+        before = len(targets)
+        kept = []
+        for p in targets:
+            try:
+                kept.append(p) if width_of(p) * 2 <= a.max_output else None
+            except Exception:
+                pass
+        targets = kept
+        print("  %d skipped: doubling would exceed --max-output %d"
+              % (before - len(targets), a.max_output), flush=True)
     if a.min_width:
         before = len(targets)
         kept = []
@@ -160,7 +216,10 @@ def main():
             shutil.copy2(src, mine)
         t0 = time.time()
         try:
-            tex, out, nw, nh, nm = upscale(mine, 2.0, FILTERS['lanczos'], False, model)
+            # model=None means Lanczos. Normals and speculars must not go
+            # through the AI model - see MAP_TYPES above.
+            use = model if method_for(live) == 'ai' else None
+            tex, out, nw, nh, nm = upscale(mine, 2.0, FILTERS['lanczos'], False, use)
             chk = TextureMap(out)
             assert chk.file_id == tex.file_id, "File ID changed"
             assert chk.format == tex.format and chk.faces == tex.faces
