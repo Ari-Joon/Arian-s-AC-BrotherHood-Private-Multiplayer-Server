@@ -166,23 +166,30 @@ class Program
             var written = new FileInfo(tmp).Length;
             if (written < 64) { File.Delete(tmp); Console.WriteLine($"  FAILED  {Path.GetFileName(file)} (wrote {written} bytes)"); return false; }
 
-            // THE GUARD THAT WAS MISSING. Serialize writes whatever is in the
-            // extracted folder and nothing checks that it is all there, so an
-            // INCOMPLETE unpack produces a smaller container and reports "ok".
-            // That is how AC2MP_ID32_MainTemplate went 3,833,796 -> 849,778
-            // bytes - 22% of the original - and shipped a character whose model
-            // was mostly missing. The old floor of 64 bytes could not catch it,
-            // and the forge-level check could not either, because the forge as a
-            // whole still grew.
+            // THE GUARD THAT WAS MISSING. Some containers DO NOT ROUND-TRIP:
+            // AnvilToolkit reads every resource and writes back a fraction of
+            // the data, with no error. AC2MP_ID32_MainTemplate unpacks to 134
+            // files and repacks to 849,778 bytes against 3,833,796 - 22% -
+            // whether or not the extraction was complete. Reproduced exactly,
+            // to the byte. It shipped a persona whose model was mostly gone.
             //
-            // Upscaling only ever GROWS a container, so any real shrink means
-            // resources went missing.
+            // The old floor of 64 bytes could not catch that, and the
+            // forge-level check could not either, because the forge as a whole
+            // still grew from the textures that DID work.
+            //
+            // Not universal: ID14, ID20, ID25, ID28 and ID34 all round-trip and
+            // grow 130-150%. Something specific to the others cannot be
+            // re-serialised and is dropped silently.
+            //
+            // Upscaling only ever GROWS a container, so any shrink means data
+            // was lost. Refusing keeps the original - which costs upscaled
+            // textures on that persona and keeps a working model.
             if (!allowShrink && written < before * 95 / 100)
             {
                 File.Delete(tmp);
                 Console.WriteLine($"  REFUSED {Path.GetFileName(file)}  {before:N0} -> {written:N0} bytes " +
-                                  $"({100.0 * written / before:F0}%) - the extracted folder is incomplete. " +
-                                  $"Re-unpack it with --force, or pass --allow-shrink if the loss is intended.");
+                                  $"({100.0 * written / before:F0}%) - this container does not round-trip; " +
+                                  $"original kept. Re-unpack with --force to rule out a partial extract.");
                 return false;
             }
             File.Delete(file);
