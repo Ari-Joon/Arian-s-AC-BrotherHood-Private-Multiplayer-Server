@@ -314,13 +314,13 @@ Add-Rule $COL2 92 440
 [void](Add-Text "IMAGE QUALITY" $COL2 108 $fHead $cAccent)
 [void](Add-Text "Passed on the command line. 'default' leaves the switch off entirely." ($COL2 + 2) 128 $fSmall $cMuted)
 
-$shadowBox = Add-Row "Shadows"          "unmeasured"                 152 @('default','off','normal','full')        $cfg.Shadows $COL2
-$postBox   = Add-Row "Post-processing"  "unmeasured"                 200 @('default','off','normal','full')        $cfg.PostFX $COL2
-$msaaBox   = Add-Row "Anti-aliasing"    "MSAA level"                 248 @('default','none','2x','4x','6x','8x')   $cfg.MSAA $COL2
-$mipsBox   = Add-Row "Full mip chains"  "+109 MB - no in-game equivalent"  296 @('default','on','off')             $cfg.FullMips $COL2
-$atlasBox  = Add-Row "Atlas mipmaps"    "+111 MB - likely the same effect" 344 @('default','on','off')             $cfg.AtlasMips $COL2
-$aoBox     = Add-Row "Ambient occlusion" "contact shadowing - no in-game equivalent" 392 @('default','on','off')   $cfg.AmbientOcclusion $COL2
-$farBox    = Add-Row "Draw distance"    "no in-game equivalent"      440 @('default','5000','10000','20000')       $(if ($cfg.FarDist -gt 0) { "$($cfg.FarDist)" } else { 'default' }) $COL2
+$shadowBox = Add-Row "Shadows"          "unmeasured"                 152 @('default','off','normal','full')        $cfg.Shadows -x $COL2
+$postBox   = Add-Row "Post-processing"  "unmeasured"                 200 @('default','off','normal','full')        $cfg.PostFX -x $COL2
+$msaaBox   = Add-Row "Anti-aliasing"    "MSAA level"                 248 @('default','none','2x','4x','6x','8x')   $cfg.MSAA -x $COL2
+$mipsBox   = Add-Row "Full mip chains"  "+109 MB - no in-game equivalent"  296 @('default','on','off')             $cfg.FullMips -x $COL2
+$atlasBox  = Add-Row "Atlas mipmaps"    "+111 MB - likely the same effect" 344 @('default','on','off')             $cfg.AtlasMips -x $COL2
+$aoBox     = Add-Row "Ambient occlusion" "contact shadowing - no in-game equivalent" 392 @('default','on','off')   $cfg.AmbientOcclusion -x $COL2
+$farBox    = Add-Row "Draw distance"    "no in-game equivalent"      440 @('default','5000','10000','20000')       $(if ($cfg.FarDist -gt 0) { "$($cfg.FarDist)" } else { 'default' }) -x $COL2
 
 Add-Rule $COL2 484 440
 
