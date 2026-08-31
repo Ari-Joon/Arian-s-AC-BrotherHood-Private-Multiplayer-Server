@@ -19,10 +19,26 @@ Brotherhood's multiplayer splits in two:
 | Login, lobbies, matchmaking, friends | **This server** (Quazal Rendez-Vous) |
 | The match itself | **Peer-to-peer between players** |
 
-![A match in Rome with every texture upscaled](docs/images/gameplay-rome.png)
+![A private lobby launching with a single player](docs/images/solo-private-lobby.png)
 
-*The tutorial session in Rome, running on rebuilt forges: all 69 character
-textures and all 770 environment textures upscaled 2x through Real-ESRGAN.*
+*A private WANTED lobby on Mont St-Michel with one player and seven empty
+slots - and LAUNCH is live. The game normally refuses this: every mode carries
+a `PrivateMinPlayers` of 2 to 4. See [Playing alone](#playing-alone).*
+
+![The persona roster](docs/images/personas.png)
+
+*Every persona and every ability is unlocked for every account, set once on the
+host and inherited by everyone who joins.*
+
+![In a match, abilities ready](docs/images/in-match-abilities.png)
+
+*A live match on rebuilt forges, with abilities the host tuned server-side.*
+
+![The launcher](docs/images/launcher.png)
+
+*The launcher: display, account, match rules and textures on the left;
+command-line image-quality switches on the right, with the read-only in-game
+values shown beside them so the two are not confused.*
 
 The server introduces players to each other and then steps out. It never sees the gameplay. That means you do not need a powerful host — but it also means players must be able to reach each other directly (see *Networking*).
 
@@ -235,8 +251,6 @@ powershell -File tools\acb-launcher.ps1 -AmbientOcclusion on -FullMips on -Shado
 
 `/shadows` and `/postfx` **do something**, established by comparing two frames in
 the world with every other switch held identical:
-
-![shadows and post-processing on and off](docs/images/shadows-postfx-ab.png)
 
 | | luminance std |
 |---|---|
@@ -877,11 +891,6 @@ minutes rather than four hours. Do not install both `onnxruntime` and
 1024 map magnified as the game magnifies it, plain Lanczos, and Real-ESRGAN run
 at 4x then downsampled to 2x. The AI pass puts back weave and stitching rather
 than smoothing the interpolation.*
-
-![Close-range stonework and cobbles](docs/images/texture-detail.png)
-
-*In-game stonework and cobbles at 3x nearest-neighbour, so what you are looking
-at is texels rather than a smoothing filter.*
 
 **The codec is the part worth trusting.** `bc.py` decodes and encodes BC1, BC2
 and BC3 in numpy, and its decoder is **byte-exact against Pillow's** on all four
