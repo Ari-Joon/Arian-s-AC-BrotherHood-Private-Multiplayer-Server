@@ -623,6 +623,71 @@ or abilities is modified.
 differently, and that the shadows/postfx difference above is not partly camera
 position. Both are recorded as unverified rather than quietly claimed.
 
+## Graphics: what we ship, and where the engine stops us
+
+The game is **Direct3D 9 from 2010**. That single fact decides most of what is
+and is not possible, so the reasoning is recorded here rather than rediscovered.
+
+### What is kept, and what it costs
+
+| Change | Gain | Cost | Works for everyone? |
+|---|---|---|---|
+| **Upscaled map textures** (13 forges) | large - the city is most of the screen | ~800 MB disk, hours of GPU | needs running the pipeline yourself |
+| **Supersampling** (NVIDIA DSR / AMD VSR, 4x) | large - fixes edges, shimmer, distance | GPU load | **yes** - NVIDIA, AMD and Intel all have it |
+| **ReShade + MXAO** | large - ambient occlusion and contact shadows the engine never drew | one shader's cost; needs MSAA off | **yes** - vendor neutral |
+| **In-game settings at their ceilings** | moderate | none | **yes** |
+| **16x anisotropic filtering** | moderate - sharp ground textures at angles | none | **yes**, but see the profile note |
+
+**Antialiasing is deliberately OFF.** MXAO needs the depth buffer and D3D9 will
+not provide one while multisampling is on, so it is one or the other. With
+supersampling at 4x the edges are already better than MSAA gave, and ambient
+occlusion is the larger gain. `tools/reshade-prep.ps1` toggles it.
+
+**`ACBMP.exe` cannot hold an NVIDIA program profile.** It is absent from the
+driver profile database entirely - 9,457 executables listed, not this one -
+which is also why the NVIDIA App cannot see it. **Set anisotropic filtering and
+antialiasing GLOBALLY**, or they never reach the game.
+
+### What we dropped, and why
+
+**Upscaled character textures.** Reverted. AnvilToolkit's repack silently loses
+data on EVERY container - a localisation package we never touched came back at
+96.3% - and up to 78% on model-heavy ones. It shipped a persona rendering as a
+floating torso. Characters stay vanilla with correct models. See the section
+below.
+
+**DLSS.** Impossible. It needs DX11/12/Vulkan plus engine motion vectors; this
+is D3D9 with `Direct3DCreate9` and no DXGI or NVAPI. No injector can supply data
+the engine never produces.
+
+**DXVK + frame generation.** Dropped as unnecessary. It would translate D3D9 to
+Vulkan so NVIDIA Smooth Motion could generate frames, but supersampling already
+runs comfortably, and DXVK claims the same `d3d9.dll` that ReShade needs.
+
+**SMAA.** Not installed. At 4x supersampling it would soften an image we paid 4x
+the pixels for.
+
+**Crowd density and variety.** Not reachable. The only crowd entries in the
+server-authoritative `.cxb` are `CrowdBandwidth_*`, which govern network
+synchronisation rather than population; the counts live as compiled binary
+inside the map forges, and any forge repack loses data. `tools/crowd-patch.py`
+is an experiment against the attribute names, not a fix.
+
+**Shadow and lighting settings.** Already at their measured ceilings -
+`ShadowQuality` 4, `EnvironmentQuality` 5 - and the game rewrites anything higher
+back down. `/lightmode full` selects `FullBright`, a debug view with lighting
+REMOVED, so it is avoided.
+
+### Why we stopped here
+
+Everything remaining is blocked by the engine rather than by effort: a 2010
+renderer with fixed quality ceilings, a settings container the client refuses to
+accept edited, and an asset repacker that cannot round-trip its own files. The
+levers that still worked - resolution, post-processing, filtering - are the ones
+that operate OUTSIDE the game's data, and those are all applied.
+
+---
+
 ## Characters stay VANILLA: the repack is lossy for everything
 
 **The persona archives cannot be safely rebuilt with this tooling, so they are
