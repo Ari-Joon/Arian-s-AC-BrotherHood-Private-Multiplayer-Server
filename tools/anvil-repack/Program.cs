@@ -1,4 +1,4 @@
-// Repack Anvil .data containers and .forge archives without the GUI.
+﻿// Repack Anvil .data containers and .forge archives without the GUI.
 //
 // This is the write half of tools/anvil-unpack, and it is destructive: it
 // overwrites files inside your game installation. Two safety nets:
@@ -56,7 +56,7 @@ class Program
     {
         if (argv.Length == 0)
         {
-            Console.WriteLine("usage: anvil-repack --data <f.data ...> | --data-all <dir> [--only-modified] | --forge <f.forge>");
+            Console.WriteLine("usage: anvil-repack --data <f.data ...> | --data-all <dir> [--only-modified] [--allow-shrink] | --forge <f.forge>");
             return 2;
         }
         if (!Directory.Exists(KIT)) { Console.Error.WriteLine($"AnvilKit not found at {KIT}"); return 2; }
@@ -73,6 +73,10 @@ class Program
              ?.Invoke(null, null);
         var gameT = types.First(t => t.Name == "Game" && t.IsEnum);
         game = Enum.Parse(gameT, "Brotherhood");
+
+        // A container that SHRINKS has lost resources. Upscaling only ever grows
+        // one, so this is never expected in this pipeline.
+        allowShrink = argv.Any(a => a == "--allow-shrink");
 
         var mode = argv[0];
         if (mode == "--forge")
@@ -110,6 +114,8 @@ class Program
         Console.WriteLine($"\n{ok} repacked, {bad} failed");
         return bad > 0 ? 1 : 0;
     }
+
+    static bool allowShrink;
 
     static bool RepackData(string file)
     {
@@ -159,6 +165,26 @@ class Program
 
             var written = new FileInfo(tmp).Length;
             if (written < 64) { File.Delete(tmp); Console.WriteLine($"  FAILED  {Path.GetFileName(file)} (wrote {written} bytes)"); return false; }
+
+            // THE GUARD THAT WAS MISSING. Serialize writes whatever is in the
+            // extracted folder and nothing checks that it is all there, so an
+            // INCOMPLETE unpack produces a smaller container and reports "ok".
+            // That is how AC2MP_ID32_MainTemplate went 3,833,796 -> 849,778
+            // bytes - 22% of the original - and shipped a character whose model
+            // was mostly missing. The old floor of 64 bytes could not catch it,
+            // and the forge-level check could not either, because the forge as a
+            // whole still grew.
+            //
+            // Upscaling only ever GROWS a container, so any real shrink means
+            // resources went missing.
+            if (!allowShrink && written < before * 95 / 100)
+            {
+                File.Delete(tmp);
+                Console.WriteLine($"  REFUSED {Path.GetFileName(file)}  {before:N0} -> {written:N0} bytes " +
+                                  $"({100.0 * written / before:F0}%) - the extracted folder is incomplete. " +
+                                  $"Re-unpack it with --force, or pass --allow-shrink if the loss is intended.");
+                return false;
+            }
             File.Delete(file);
             File.Move(tmp, file);
 

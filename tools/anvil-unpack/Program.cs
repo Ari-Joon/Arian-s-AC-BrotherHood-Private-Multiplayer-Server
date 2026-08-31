@@ -1,4 +1,4 @@
-// Unpack Anvil .data containers without the AnvilToolkit GUI.
+﻿// Unpack Anvil .data containers without the AnvilToolkit GUI.
 //
 // WHY THIS EXISTS
 // The container codec resisted every standard decompressor: LZ4, zlib, raw
@@ -108,6 +108,10 @@ class Program
             var outDir = Path.Combine(Path.GetDirectoryName(file), "Extracted", Path.GetFileName(file));
             if (Directory.Exists(outDir) && !force)
             {
+                // A non-empty folder is treated as already unpacked. Note that a
+                // PARTIAL unpack looks identical to a complete one here, so a
+                // re-run will NOT repair it - and anvil-repack will then write a
+                // truncated container from the fragment. Use --force to redo one.
                 if (Directory.GetFiles(outDir).Length > 0) { skipped++; continue; }
                 Directory.Delete(outDir, true);          // empty folder from a failed run
             }
