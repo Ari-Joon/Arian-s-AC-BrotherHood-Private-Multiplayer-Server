@@ -82,6 +82,12 @@ def main():
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--only', help="restrict to forges whose name contains this")
     ap.add_argument('--model', help="ONNX upscaler; found automatically if omitted")
+    ap.add_argument('--min-width', type=int, default=0,
+                    help="skip textures narrower than this. The persona archives "
+                         "contain 4x4 and 8x8 maps that are lookup/gradient data, "
+                         "not surfaces - upscaling those gains nothing and risks "
+                         "changing how they are sampled. 128 is sensible there; "
+                         "the default of 0 keeps the map behaviour unchanged.")
     ap.add_argument('--prefix', action='append',
                     help="forge name prefix to walk; repeatable. "
                          "Defaults to the multiplayer maps.")
@@ -89,7 +95,18 @@ def main():
 
     print("below-normal priority: %s" % deprioritise(), flush=True)
     targets = collect(a.only, tuple(a.prefix) if a.prefix else DEFAULT_PREFIXES)
-    print("%d diffuse textures across the map forges" % len(targets), flush=True)
+    print("%d diffuse textures found" % len(targets), flush=True)
+    if a.min_width:
+        before = len(targets)
+        kept = []
+        for p in targets:
+            try:
+                kept.append(p) if width_of(p) >= a.min_width else None
+            except Exception:
+                pass                      # unreadable header: leave it alone
+        targets = kept
+        print("  %d below --min-width %d skipped" % (before - len(targets), a.min_width),
+              flush=True)
 
     plan, skipped = [], []
     for p in targets:
