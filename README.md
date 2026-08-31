@@ -219,9 +219,9 @@ to every client on connect, so changing it on the server changes the rules for
 everyone who joins - nobody else installs anything.
 
 ```
-powershell -File toolscb-launcher.ps1 -RulesOnly -CooldownScale 0.5
-powershell -File toolscb-launcher.ps1 -RulesOnly -AbilityRule AbilitySmokeBomb:Radius=8.0
-powershell -File toolscb-launcher.ps1 -RulesOnly -ResetRules
+powershell -File tools\acb-launcher.ps1 -RulesOnly -CooldownScale 0.5
+powershell -File tools\acb-launcher.ps1 -RulesOnly -AbilityRule AbilitySmokeBomb:Radius=8.0
+powershell -File tools\acb-launcher.ps1 -RulesOnly -ResetRules
 ```
 
 `-RulesOnly` applies rules without launching, so they can be changed between
@@ -792,7 +792,7 @@ alternative is broken characters.
 **Running it:**
 
 ```
-python tools	exture-upscaleatch.py --prefix DataPC_skins_ --min-width 128
+python tools\texture-upscale\batch.py --prefix DataPC_skins_ --min-width 128
 ```
 
 `--prefix` is required - the default prefixes cover only the map forges, and
