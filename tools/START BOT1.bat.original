@@ -1,0 +1,8 @@
+@echo off
+title AC Brotherhood - Bot1
+echo Starting Bot1 client...
+echo.
+cd /d "C:\Program Files (x86)\Steam\steamapps\common\Assassins Creed Brotherhood"
+start "" "ACBMP.exe" /onlineUser:Bot1 /onlinePassword:Ry0PjIkbKgdxDghtST2S
+echo Launched. This window can be closed.
+timeout /t 8 >nul
