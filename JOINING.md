@@ -131,3 +131,42 @@ Steam.
 
 The host's firewall needs **TCP 80** and **UDP 21030–21031** open, scoped to the
 virtual LAN subnet only — never to the internet.
+
+---
+
+## Making it look good (optional, 2 minutes, free)
+
+None of this is needed to play. All of it works on **any** GPU vendor.
+
+**1. Supersampling — the biggest single gain.** Render above your screen's
+resolution and let the driver downsample. It sharpens edges, distant detail and
+texture shimmer all at once.
+
+- **NVIDIA:** Control Panel to Manage 3D Settings to **Global Settings** to
+  **DSR - Factors** to tick **4.00x**, smoothness ~33%
+- **AMD:** Adrenalin to Display to **Virtual Super Resolution** to On
+- **Intel:** Arc Control to **Xe Super Sampling / scaling**
+
+Then pick the higher resolution in the game's video options. If the game refuses
+it, your display cannot expose that mode - skip this step, nothing is lost.
+
+**2. Anisotropic filtering 16x.** Sharpens ground and wall textures at an angle,
+which is most of what you look at while running rooftops. Costs almost nothing.
+
+**IMPORTANT: set it in GLOBAL settings, not per-program.** `ACBMP.exe` cannot
+hold an NVIDIA program profile - it is absent from the driver's profile database
+entirely, which is also why the NVIDIA App cannot see it. A per-program setting
+silently never reaches the game.
+
+**3. In-game settings.** Every quality key is already at the maximum the engine
+accepts; the game rewrites anything higher back down. Nothing to do.
+
+**What we deliberately did NOT ship**, so you are not missing anything:
+
+- **DLSS** is impossible here - the game is Direct3D 9 from 2010 and DLSS needs
+  DX11/12/Vulkan plus engine motion vectors that do not exist.
+- **ReShade / MXAO** adds ambient occlusion the engine never drew, but it forces
+  antialiasing OFF (D3D9 will not expose a depth buffer while multisampling) and
+  it was judged not worth the trade. Install it yourself if you disagree.
+- **Upscaled character textures** are reverted - the asset repacker silently
+  loses model data and shipped a character rendering as a floating torso.
