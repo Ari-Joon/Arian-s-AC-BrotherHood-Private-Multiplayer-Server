@@ -120,7 +120,7 @@ $fBtn   = New-Object Drawing.Font("Segoe UI Semibold", 12)
 
 # --- saved preferences -------------------------------------------------------
 $cfg = @{
-    Display = 'Borderless'; Resolution = ''; User = ''; TextureSet = 'leave as-is'
+    Display = 'Borderless'; Resolution = ''; User = ''; TextureSet = 'Upscaled'
     Shadows = 'default'; PostFX = 'default'; MSAA = 'default'
     FullMips = 'default'; AtlasMips = 'default'; AmbientOcclusion = 'default'
     FarDist = 0
@@ -325,7 +325,7 @@ $farBox    = Add-Row "Draw distance"    "no in-game equivalent"      440 @('defa
 Add-Rule $COL2 484 440
 
 # --- what the game itself is set to ------------------------------------------
-[void](Add-Text "IN-GAME SETTINGS" 30 272 $fHead $cAccent)
+[void](Add-Text "IN-GAME SETTINGS" $COL2 520 $fHead $cAccent)
 $iniBits = @()
 foreach ($k in $CEILINGS.Keys) {
     if ($ini.Contains($k)) {
@@ -337,19 +337,19 @@ foreach ($k in $ENUMS) {
     if ($ini.Contains($k)) { $iniBits += "$k $($ini[$k]) (enum)" }
 }
 if ($iniBits.Count) {
-    [void](Add-Text (($iniBits -join '   ') -replace '(.{62}\S*)\s', "`$1`n") 32 686 $fSmall $cMuted)
-    [void](Add-Text "Read-only. No command-line switch reaches these. The game reads`nthem at startup but clamps above-maximum values when it writes, and whether a`nhigher value renders differently is not yet verified." 32 330 $fSmall $cMuted)
+    [void](Add-Text (($iniBits -join '   ') -replace '(.{62}\S*)\s', "`$1`n") ($COL2 + 2) 544 $fSmall $cMuted)
+    [void](Add-Text "Read-only. No command-line switch reaches these. The game reads`nthem at startup but clamps above-maximum values when it writes, and whether a`nhigher value renders differently is not yet verified." ($COL2 + 2) 596 $fSmall $cMuted)
 } else {
-    [void](Add-Text "No [Graphics] section found - launch the game once." 32 294 $fSmall $cMuted)
+    [void](Add-Text "No [Graphics] section found - launch the game once." ($COL2 + 2) 544 $fSmall $cMuted)
 }
 
-Add-Rule 30 364 420
+Add-Rule 30 272 420
 
 # --- account -----------------------------------------------------------------
-[void](Add-Text "ACCOUNT" 30 380 $fHead $cAccent)
+[void](Add-Text "ACCOUNT" 30 288 $fHead $cAccent)
 
 $uBox = New-Object Windows.Forms.ComboBox
-$uBox.Location = New-Object Drawing.Point(34, 404)
+$uBox.Location = New-Object Drawing.Point(34, 312)
 $uBox.Size = New-Object Drawing.Size(200, 28)
 Style-Combo $uBox
 foreach ($a in $accounts) { [void]$uBox.Items.Add($a) }
@@ -403,7 +403,7 @@ function Show-NamePrompt($current) {
 
 $renameBtn = New-Object Windows.Forms.Button
 $renameBtn.Text = "Rename"
-$renameBtn.Location = New-Object Drawing.Point(250, 403)
+$renameBtn.Location = New-Object Drawing.Point(250, 311)
 $renameBtn.Size = New-Object Drawing.Size(200, 30)
 $renameBtn.Font = $fBody
 $renameBtn.FlatStyle = 'Flat'
@@ -454,16 +454,16 @@ $renameBtn.Add_Click({
 #
 # "default" means the values the game shipped with, restored from a pristine
 # backup rather than scaled back up - so nothing drifts after repeated changes.
-Add-Rule 30 446 420
-[void](Add-Text "MATCH RULES" 30 462 $fHead $cAccent)
-[void](Add-Text "Applied by the host. Everyone who joins plays by these." 32 482 $fSmall $cMuted)
+Add-Rule 30 354 420
+[void](Add-Text "MATCH RULES" 30 370 $fHead $cAccent)
+[void](Add-Text "Applied by the host. Everyone who joins plays by these." 32 390 $fSmall $cMuted)
 
 # A whole page for abilities: every one the game has, with its own parameters.
 # Host only - it edits the settings file the SERVER hands out, so it would do
 # nothing on a joining player's machine.
 $skillsBtn = New-Object Windows.Forms.Button
 $skillsBtn.Text = "Customise abilities..."
-$skillsBtn.Location = New-Object Drawing.Point(34, 506)
+$skillsBtn.Location = New-Object Drawing.Point(34, 414)
 $skillsBtn.Size = New-Object Drawing.Size(280, 32)
 $skillsBtn.Font = $fBody
 $skillsBtn.FlatStyle = 'Flat'
@@ -472,7 +472,7 @@ $skillsBtn.ForeColor = $cText
 $skillsBtn.FlatAppearance.BorderColor = [Drawing.Color]::FromArgb(74, 74, 86)
 $skillsBtn.Cursor = 'Hand'
 $form.Controls.Add($skillsBtn)
-[void](Add-Text "22 abilities, every parameter, and unlock-everything" 34 542 $fSmall $cMuted)
+[void](Add-Text "22 abilities, every parameter, and unlock-everything" 34 450 $fSmall $cMuted)
 $skillsBtn.Add_Click({
     $ed = Join-Path $PSScriptRoot "skills-editor.ps1"
     if (Test-Path $ed) {
@@ -485,18 +485,18 @@ if (-not $isHost) {
     $skillsBtn.ForeColor = $cMuted
 }
 
-$cdBox = Add-Row "Ability cooldowns" "lower recharges faster" 570 @('default','0.75x','0.5x','0.25x','0.1x') $cfg.CooldownScale
-$duBox = Add-Row "Ability durations" "how long an ability lasts" 618 @('default','1.25x','1.5x','2x')      $cfg.DurationScale
+$cdBox = Add-Row "Ability cooldowns" "lower recharges faster" 478 @('default','0.75x','0.5x','0.25x','0.1x') $cfg.CooldownScale
+$duBox = Add-Row "Ability durations" "how long an ability lasts" 526 @('default','1.25x','1.5x','2x')      $cfg.DurationScale
 
 # --- textures -----------------------------------------------------------------
 # The game reads its forges at STARTUP, so this must happen before launch. An
 # in-game toggle would need the client's UI patched. Switching is a file copy
 # between two prepared sets, so it costs seconds rather than a rebuild's hours.
-Add-Rule 30 664 420
-[void](Add-Text "TEXTURES" 30 680 $fHead $cAccent)
-[void](Add-Text "Swapped before launch. 'leave as-is' touches nothing." 32 700 $fSmall $cMuted)
-$texBox = Add-Row "Texture set" "vanilla vs 2x AI upscale" 728 @('leave as-is','Upscaled','Vanilla') $cfg.TextureSet
-$texNote = Add-Text "" 34 772 $fSmall $cMuted
+Add-Rule 30 572 420
+[void](Add-Text "TEXTURES" 30 588 $fHead $cAccent)
+[void](Add-Text "Swapped before launch. Already-matching files are skipped." 32 608 $fSmall $cMuted)
+$texBox = Add-Row "Texture set" "vanilla vs 2x AI upscale" 636 @('Upscaled','Vanilla') $cfg.TextureSet
+$texNote = Add-Text "" 34 680 $fSmall $cMuted
 
 # Say what is actually available rather than offering a switch that fails.
 $setsDir = Join-Path $game "multi\_texture_sets"
@@ -510,7 +510,7 @@ if ($haveV -eq 0 -or $haveU -eq 0) {
 
 $resetBtn = New-Object Windows.Forms.Button
 $resetBtn.Text = "Reset to defaults"
-$resetBtn.Location = New-Object Drawing.Point(250, 458)
+$resetBtn.Location = New-Object Drawing.Point(250, 366)
 $resetBtn.Size = New-Object Drawing.Size(200, 30)
 $resetBtn.Font = $fBody
 $resetBtn.FlatStyle = 'Flat'
@@ -633,7 +633,7 @@ $btn.Add_Click({
     # Swap BEFORE launching. The game reads forges at startup, so doing this
     # afterwards would silently apply to the next run instead of this one.
     $want = [string]$texBox.SelectedItem
-    if ($want -and $want -ne 'leave as-is') {
+    if ($want) {
         $t = Join-Path $PSScriptRoot "texture-toggle.ps1"
         if (Test-Path $t) {
             $btn.Text = "SWITCHING TEXTURES..."

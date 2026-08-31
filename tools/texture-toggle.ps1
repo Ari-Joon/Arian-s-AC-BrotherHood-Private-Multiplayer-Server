@@ -150,9 +150,20 @@ $files = @(Get-ChildItem $d -Filter *.forge)
 if (-not $files) { Write-Host "  set '$Mode' is empty" -ForegroundColor Red; exit 1 }
 
 Write-Host "  switching to $Mode ($($files.Count) forges)" -ForegroundColor Cyan
+# Skip anything already in the requested state. This used to copy all 15
+# forges every time - 1.3 to 2.1 GB - even when the live files already WERE
+# that set, which made picking a set on every launch too slow to be worth
+# doing. Size distinguishes the sets: they differ by tens of MB per forge.
+$copied = 0; $already = 0
 foreach ($f in $files) {
     $live = Join-Path $multi $f.Name
+    if ((Test-Path $live) -and ((Get-Item $live).Length -eq $f.Length)) {
+        $already++
+        continue
+    }
     Copy-Item $f.FullName $live -Force
+    $copied++
     "    {0,-40} {1,12:N0}" -f $f.Name, $f.Length
 }
+if ($already) { Write-Host "    $already already in place, skipped" -ForegroundColor DarkGray }
 Write-Host "  done - launch and compare" -ForegroundColor Green
