@@ -1025,6 +1025,42 @@ and HUD scale has not been done. Everything above that boundary is tested; below
 it, nothing is. A bot that hallucinates contacts is worse than one that stands
 still, so it returns nothing rather than guessing.
 
+### Bots on ONE machine: closed, and why
+
+**A second game client cannot be kept in a match on the same PC.** PunkBuster
+ejects it. This is recorded as closed so nobody spends another evening on it.
+
+Everything below was tried and failed:
+
+| Attempt | Result |
+|---|---|
+| Disable the PB **client** module (`wc*.dll`) | still ejected |
+| Disable the PB **server** module (`ws*.dll`) - the half that owns "kicked player" | still ejected |
+| Disable **all** PB modules | the game crashes on load |
+| Stop the `PnkBstrB` service | ejected after ~2 min |
+| Service running | ejected after **9 seconds** |
+| A separately named `ACBMP_bot.exe` with its own config | ejected immediately |
+| `/pb_sv_enablekicks 0`, `/pb_sv_lan 1` via the command line | still ejected |
+
+PunkBuster tracks per-MACHINE. `PnkBstrB.exe` serves one game instance, the
+first client claims it, and the second fails initialisation - so the eject is
+not about bots, or names, or configuration.
+
+**And the workaround does not work either.** Recovering means re-inviting, and
+`SendInvitation` comes from the HOST client's UI - automating it means injecting
+keyboard input into the window the player is using. The bot half could be driven
+(a virtual gamepad reaches a background window; XInput is polled regardless of
+focus), but the host half cannot be, without taking the keyboard off the player.
+
+**What DOES work, and is kept:** everything up to the eject. A real second client
+can be invited, accept, join, load in and play - it walked, ran, blended and used
+abilities in a live match. All of that machinery is sound and is what a SECOND
+MACHINE would use: its own PunkBuster, its own controller, its own config. That
+is the only route left, and it needs hardware rather than code.
+
+Solo launch makes bots unnecessary for testing anyway - see
+[Playing alone](#playing-alone).
+
 ### Getting a real bot client into a match — what actually works
 
 A bot here is a real game client with its own account. Two things had to be
